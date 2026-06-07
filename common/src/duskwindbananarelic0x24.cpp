@@ -26,6 +26,7 @@ DuskwindBananaRelic0x24::~DuskwindBananaRelic0x24()
 }
 
 // FUNCTION: GOLDP 0x100257e0
+// FUNCTION: LEGORACERS 0x0040fda0
 void DuskwindBananaRelic0x24::FUN_100257e0(GolRenderDevice* p_renderer, const DuskWindBananaRelicParams& p_params)
 {
 	m_unk0x10 = p_params.m_unk0x08;
@@ -60,4 +61,19 @@ void DuskwindBananaRelic0x24::FUN_100257e0(GolRenderDevice* p_renderer, const Du
 	else {
 		m_unk0x04 = NULL;
 	}
+}
+
+// FUNCTION: LEGORACERS 0x0040fe50
+void DuskwindBananaRelic0x24::CopyParamsTo(DuskWindBananaRelicParams* p_params) const
+{
+	p_params->m_unk0x00 = m_unk0x08;
+	p_params->m_unk0x04 = m_unk0x04;
+	p_params->m_unk0x08 = m_unk0x10;
+	p_params->m_unk0x0c = m_unk0x0c;
+	p_params->m_unk0x10 = m_unk0x20;
+	p_params->m_unk0x11 = m_unk0x21;
+	p_params->m_unk0x12 = m_unk0x22;
+	p_params->m_unk0x12 = m_unk0x22;
+	p_params->m_unk0x13 = m_unk0x23;
+	p_params->m_unk0x13 = m_unk0x23;
 }

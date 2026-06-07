@@ -116,6 +116,7 @@ set(COMMON_SOURCES
   common/src/golmodelentity.cpp
   common/src/mabmaterialanimationitem0x8.cpp
   common/src/mabmaterialanimationitem0x18.cpp
+  common/src/duskwindbananarelic0x24.cpp
 )
 
 # These GOLDP-only files currently need the same inline expansion behavior as common_goldp.
@@ -131,7 +132,6 @@ set(GOLDP_INLINE_EXPANSION_SOURCES
   GolDP/src/image/utopianpan0xa4.cpp
   GolDP/src/image/whitebaffoon0x50.cpp
   GolDP/src/render/golrenderdevice.cpp
-  GolDP/src/material/duskwindbananarelic0x24.cpp
   GolDP/src/render/gold3drendersurface.cpp
   GolDP/src/surface/falcondunebag0x10.cpp
   GolDP/src/surface/goldepthbuffer.cpp
@@ -209,7 +209,6 @@ add_library(goldp SHARED
   GolDP/src/surface/bronzedune0x4c.cpp
   GolDP/src/image/whitebaffoon0x50.cpp
   GolDP/src/image/utopianpan0xa4.cpp
-  GolDP/src/material/duskwindbananarelic0x24.cpp
   GolDP/src/material/duskwindbananarelic0x30.cpp
   GolDP/src/surface/goldepthbuffer.cpp
   GolDP/src/render/golsoftwarerenderer.cpp
@@ -296,7 +295,6 @@ add_executable(legoracers WIN32
   LEGORacers/src/input/directinputdevice.cpp
   LEGORacers/src/input/inputdevice.cpp
   LEGORacers/src/menu/menumanager.cpp
-  LEGORacers/src/menu/runtime/duskwindbananarelic0x24.cpp
   LEGORacers/src/race/racemoderunner.cpp
   LEGORacers/src/util/stackoflegou16.cpp
   LEGORacers/src/menu/menudialogscreen.cpp
