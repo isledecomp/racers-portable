@@ -1,11 +1,102 @@
-// [library:audio] DirectSound emulation. M1: functional-silent stubs (buffers hold
-// memory, cursors stand still); the miniaudio mixing engine attaches in M3.
+// [library:audio] DirectSound emulation over a miniaudio no-device engine pulled by an
+// SDL3 audio stream. Secondary buffers wrap their byte storage in a ma_audio_buffer, so
+// the game's Lock/write/Unlock cycles are naturally visible to the mixer — including the
+// music streamer's 2 s ring buffer, whose play cursor GetCurrentPosition reports from the
+// mixer's read position.
 
 #include "miniwin.h"
 
+#include <math.h>
+#include <miniaudio.h>
 #include <miniwin/dsound.h>
 #include <stdlib.h>
 #include <string.h>
+
+static const DWORD c_engineSampleRate = 22050;
+static const DWORD c_engineChannels = 2;
+
+static ma_engine g_engine;
+static SDL_AudioStream* g_stream;
+static bool g_engineReady;
+
+static void SDLCALL PullAudio(void* p_userdata, SDL_AudioStream* p_stream, int p_additionalAmount, int p_totalAmount)
+{
+	static float buffer[4096];
+	const int frameSize = (int) (sizeof(float) * c_engineChannels);
+
+	while (p_additionalAmount > 0) {
+		ma_uint64 framesWanted = (ma_uint64) (p_additionalAmount / frameSize);
+		if (framesWanted > SDL_arraysize(buffer) / c_engineChannels) {
+			framesWanted = SDL_arraysize(buffer) / c_engineChannels;
+		}
+		if (!framesWanted) {
+			break;
+		}
+
+		ma_uint64 framesRead = 0;
+		if (ma_engine_read_pcm_frames(&g_engine, buffer, framesWanted, &framesRead) != MA_SUCCESS || !framesRead) {
+			break;
+		}
+
+		static const char* statsEnv = getenv("RACERS_AUDIO_STATS");
+		if (statsEnv) {
+			static ma_uint64 totalFrames = 0;
+			static float peak = 0.0f;
+			for (ma_uint64 i = 0; i < framesRead * c_engineChannels; i++) {
+				float v = buffer[i] < 0.0f ? -buffer[i] : buffer[i];
+				if (v > peak) {
+					peak = v;
+				}
+			}
+			totalFrames += framesRead;
+			static ma_uint64 lastReport = 0;
+			if (totalFrames - lastReport >= c_engineSampleRate * 2) {
+				lastReport = totalFrames;
+				SDL_LogInfo(
+					LOG_CATEGORY_MINIWIN,
+					"audio: %llu frames pulled, peak %.3f",
+					(unsigned long long) totalFrames,
+					peak
+				);
+				peak = 0.0f;
+			}
+		}
+
+		SDL_PutAudioStreamData(p_stream, buffer, (int) (framesRead * frameSize));
+		p_additionalAmount -= (int) (framesRead * frameSize);
+	}
+}
+
+static bool EnsureEngine()
+{
+	if (g_engineReady) {
+		return true;
+	}
+
+	ma_engine_config config = ma_engine_config_init();
+	config.noDevice = MA_TRUE;
+	config.channels = c_engineChannels;
+	config.sampleRate = c_engineSampleRate;
+	if (ma_engine_init(&config, &g_engine) != MA_SUCCESS) {
+		SDL_LogError(LOG_CATEGORY_MINIWIN, "ma_engine_init failed");
+		return false;
+	}
+
+	SDL_AudioSpec spec;
+	spec.format = SDL_AUDIO_F32;
+	spec.channels = (int) c_engineChannels;
+	spec.freq = (int) c_engineSampleRate;
+	g_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, PullAudio, nullptr);
+	if (!g_stream) {
+		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_OpenAudioDeviceStream failed: %s", SDL_GetError());
+		ma_engine_uninit(&g_engine);
+		return false;
+	}
+
+	SDL_ResumeAudioStreamDevice(g_stream);
+	g_engineReady = true;
+	return true;
+}
 
 struct MiniwinSoundBuffer : public IDirectSoundBuffer {
 	MiniwinSoundBuffer(const DSBUFFERDESC& p_desc)
@@ -18,11 +109,59 @@ struct MiniwinSoundBuffer : public IDirectSoundBuffer {
 		if (m_size) {
 			m_data = (unsigned char*) calloc(1, m_size);
 		}
+
+		if (!m_data || (m_flags & DSBCAPS_PRIMARYBUFFER) || !EnsureEngine()) {
+			return;
+		}
+
+		ma_format format;
+		switch (m_format.wBitsPerSample) {
+		case 8:
+			format = ma_format_u8;
+			break;
+		case 16:
+			format = ma_format_s16;
+			break;
+		default:
+			return;
+		}
+		if (!m_format.nChannels || !m_format.nBlockAlign) {
+			return;
+		}
+
+		ma_audio_buffer_config bufferConfig =
+			ma_audio_buffer_config_init(format, m_format.nChannels, m_size / m_format.nBlockAlign, m_data, nullptr);
+		if (ma_audio_buffer_init(&bufferConfig, &m_buffer) != MA_SUCCESS) {
+			return;
+		}
+
+		if (ma_sound_init_from_data_source(&g_engine, &m_buffer, MA_SOUND_FLAG_NO_SPATIALIZATION, nullptr, &m_sound) !=
+			MA_SUCCESS) {
+			ma_audio_buffer_uninit(&m_buffer);
+			return;
+		}
+
+		m_soundReady = true;
+		ApplyFrequency(m_format.nSamplesPerSec);
 	}
 
 	~MiniwinSoundBuffer() override
 	{
+		if (m_soundReady) {
+			ma_sound_uninit(&m_sound);
+			ma_audio_buffer_uninit(&m_buffer);
+		}
 		free(m_data);
+	}
+
+	void ApplyFrequency(DWORD p_frequency)
+	{
+		if (!p_frequency) {
+			p_frequency = m_format.nSamplesPerSec;
+		}
+		if (m_soundReady && p_frequency) {
+			ma_sound_set_pitch(&m_sound, (float) p_frequency / (float) c_engineSampleRate);
+		}
 	}
 
 	DWORD m_flags = 0;
@@ -30,13 +169,22 @@ struct MiniwinSoundBuffer : public IDirectSoundBuffer {
 	WAVEFORMATEX m_format = {};
 	unsigned char* m_data = nullptr;
 	bool m_playing = false;
+	bool m_looping = false;
 	LONG m_volume = 0;
 	LONG m_pan = 0;
 	DWORD m_frequency = 0;
+
+	ma_audio_buffer m_buffer = {};
+	ma_sound m_sound = {};
+	bool m_soundReady = false;
 };
 
 struct MiniwinDirectSound : public IDirectSound {
-	HRESULT CreateSoundBuffer(LPCDSBUFFERDESC pcDSBufferDesc, LPDIRECTSOUNDBUFFER* ppDSBuffer, IUnknown* pUnkOuter) override
+	HRESULT CreateSoundBuffer(
+		LPCDSBUFFERDESC pcDSBufferDesc,
+		LPDIRECTSOUNDBUFFER* ppDSBuffer,
+		IUnknown* pUnkOuter
+	) override
 	{
 		if (!pcDSBufferDesc || !ppDSBuffer) {
 			return DSERR_INVALIDPARAM;
@@ -59,16 +207,16 @@ struct MiniwinDirectSound : public IDirectSound {
 		return DS_OK;
 	}
 
-	HRESULT SetCooperativeLevel(HWND hwnd, DWORD dwLevel) override
-	{
-		return DS_OK;
-	}
+	HRESULT SetCooperativeLevel(HWND hwnd, DWORD dwLevel) override { return DS_OK; }
 };
 
 HRESULT DirectSoundCreate(LPCGUID pcGuidDevice, LPDIRECTSOUND* ppDS, IUnknown* pUnkOuter)
 {
 	if (!ppDS) {
 		return DSERR_INVALIDPARAM;
+	}
+	if (!EnsureEngine()) {
+		return DSERR_GENERIC;
 	}
 
 	*ppDS = new MiniwinDirectSound();
@@ -90,7 +238,7 @@ HRESULT IDirectSound::SetCooperativeLevel(HWND, DWORD)
 	return DS_OK;
 }
 
-// --- IDirectSoundBuffer bodies (M1 silent implementation) ---
+// --- IDirectSoundBuffer ---
 
 HRESULT IDirectSoundBuffer::GetCaps(LPDSBCAPS pDSBufferCaps)
 {
@@ -104,11 +252,34 @@ HRESULT IDirectSoundBuffer::GetCaps(LPDSBCAPS pDSBufferCaps)
 
 HRESULT IDirectSoundBuffer::GetCurrentPosition(LPDWORD pdwCurrentPlayCursor, LPDWORD pdwCurrentWriteCursor)
 {
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+
+	DWORD play = 0;
+	if (self->m_soundReady && self->m_size) {
+		ma_uint64 frames = 0;
+		ma_sound_get_cursor_in_pcm_frames(&self->m_sound, &frames);
+
+		ma_uint64 totalFrames = self->m_size / self->m_format.nBlockAlign;
+		if (totalFrames) {
+			frames %= totalFrames;
+		}
+		play = (DWORD) (frames * self->m_format.nBlockAlign);
+	}
+
 	if (pdwCurrentPlayCursor) {
-		*pdwCurrentPlayCursor = 0;
+		*pdwCurrentPlayCursor = play;
 	}
 	if (pdwCurrentWriteCursor) {
-		*pdwCurrentWriteCursor = 0;
+		// DirectSound's write cursor leads the play cursor by a mixing latency;
+		// ~15 ms keeps the music streamer's ring arithmetic happy.
+		DWORD lead = 0;
+		if (self->m_playing && self->m_format.nAvgBytesPerSec) {
+			lead = self->m_format.nAvgBytesPerSec * 15 / 1000;
+			if (self->m_format.nBlockAlign) {
+				lead -= lead % self->m_format.nBlockAlign;
+			}
+		}
+		*pdwCurrentWriteCursor = self->m_size ? (play + lead) % self->m_size : 0;
 	}
 	return DS_OK;
 }
@@ -129,7 +300,17 @@ HRESULT IDirectSoundBuffer::GetStatus(LPDWORD pdwStatus)
 {
 	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
 	if (pdwStatus) {
-		*pdwStatus = self->m_playing ? DSBSTATUS_PLAYING : 0;
+		*pdwStatus = 0;
+		if (self->m_soundReady) {
+			// A finished one-shot stops on its own in the mixer.
+			self->m_playing = ma_sound_is_playing(&self->m_sound) != MA_FALSE;
+		}
+		if (self->m_playing) {
+			*pdwStatus = DSBSTATUS_PLAYING;
+			if (self->m_looping) {
+				*pdwStatus |= DSBSTATUS_LOOPING;
+			}
+		}
 	}
 	return DS_OK;
 }
@@ -192,12 +373,29 @@ HRESULT IDirectSoundBuffer::Lock(
 
 HRESULT IDirectSoundBuffer::Play(DWORD dwReserved1, DWORD dwPriority, DWORD dwFlags)
 {
-	static_cast<MiniwinSoundBuffer*>(this)->m_playing = true;
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	self->m_looping = (dwFlags & DSBPLAY_LOOPING) != 0;
+
+	if (self->m_soundReady) {
+		ma_sound_set_looping(&self->m_sound, self->m_looping ? MA_TRUE : MA_FALSE);
+
+		// Replaying a one-shot that ran to completion restarts it from the top.
+		if (!self->m_playing && ma_sound_at_end(&self->m_sound)) {
+			ma_sound_seek_to_pcm_frame(&self->m_sound, 0);
+		}
+		ma_sound_start(&self->m_sound);
+	}
+
+	self->m_playing = true;
 	return DS_OK;
 }
 
 HRESULT IDirectSoundBuffer::SetCurrentPosition(DWORD dwNewPosition)
 {
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	if (self->m_soundReady && self->m_format.nBlockAlign) {
+		ma_sound_seek_to_pcm_frame(&self->m_sound, dwNewPosition / self->m_format.nBlockAlign);
+	}
 	return DS_OK;
 }
 
@@ -212,30 +410,61 @@ HRESULT IDirectSoundBuffer::SetFormat(LPCWAVEFORMATEX pcfxFormat)
 
 HRESULT IDirectSoundBuffer::SetVolume(LONG lVolume)
 {
-	static_cast<MiniwinSoundBuffer*>(this)->m_volume = lVolume;
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	if (lVolume < DSBVOLUME_MIN) {
+		lVolume = DSBVOLUME_MIN;
+	}
+	if (lVolume > DSBVOLUME_MAX) {
+		lVolume = DSBVOLUME_MAX;
+	}
+	self->m_volume = lVolume;
+
+	if (self->m_soundReady) {
+		// DirectSound volume is in hundredths of a decibel of attenuation.
+		float linear = lVolume <= DSBVOLUME_MIN ? 0.0f : ma_volume_db_to_linear((float) lVolume / 100.0f);
+		ma_sound_set_volume(&self->m_sound, linear);
+	}
 	return DS_OK;
 }
 
 HRESULT IDirectSoundBuffer::SetPan(LONG lPan)
 {
-	static_cast<MiniwinSoundBuffer*>(this)->m_pan = lPan;
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	if (lPan < DSBPAN_LEFT) {
+		lPan = DSBPAN_LEFT;
+	}
+	if (lPan > DSBPAN_RIGHT) {
+		lPan = DSBPAN_RIGHT;
+	}
+	self->m_pan = lPan;
+
+	if (self->m_soundReady) {
+		ma_sound_set_pan(&self->m_sound, (float) lPan / 10000.0f);
+	}
 	return DS_OK;
 }
 
 HRESULT IDirectSoundBuffer::SetFrequency(DWORD dwFrequency)
 {
-	static_cast<MiniwinSoundBuffer*>(this)->m_frequency = dwFrequency;
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	self->m_frequency = dwFrequency;
+	self->ApplyFrequency(dwFrequency);
 	return DS_OK;
 }
 
 HRESULT IDirectSoundBuffer::Stop()
 {
-	static_cast<MiniwinSoundBuffer*>(this)->m_playing = false;
+	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
+	if (self->m_soundReady) {
+		ma_sound_stop(&self->m_sound);
+	}
+	self->m_playing = false;
 	return DS_OK;
 }
 
 HRESULT IDirectSoundBuffer::Unlock(LPVOID pvAudioPtr1, DWORD dwAudioBytes1, LPVOID pvAudioPtr2, DWORD dwAudioBytes2)
 {
+	// The mixer reads the ring memory directly; written regions are audible as-is.
 	return DS_OK;
 }
 
