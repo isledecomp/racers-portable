@@ -114,6 +114,9 @@ HRESULT MiniwinSurface::Blt(
 	// present.
 	MiniwinSurface* source = static_cast<MiniwinSurface*>(lpDDSrcSurface);
 	if (backend && m_kind == MiniwinSurfaceKind::Primary && source) {
+		if (source->m_pixelsDirty) {
+			source->CompositeToBackend(backend);
+		}
 		backend->Present();
 	}
 
@@ -125,9 +128,72 @@ HRESULT MiniwinSurface::Flip(LPDIRECTDRAWSURFACE lpDDSurfaceTargetOverride, DWOR
 	// Fullscreen present.
 	MiniwinRenderBackend* backend = m_ddraw ? m_ddraw->GetBackend() : nullptr;
 	if (backend) {
+		if (m_backBuffer && m_backBuffer->m_pixelsDirty) {
+			m_backBuffer->CompositeToBackend(backend);
+		}
+		if (m_pixelsDirty) {
+			CompositeToBackend(backend);
+		}
 		backend->Present();
 	}
 	return DD_OK;
+}
+
+void MiniwinSurface::CompositeToBackend(MiniwinRenderBackend* p_backend)
+{
+	m_pixelsDirty = false;
+	if (!m_pixels) {
+		return;
+	}
+
+	int width = (int) m_desc.dwWidth;
+	int height = (int) m_desc.dwHeight;
+	void* rgba = malloc((size_t) width * height * 4);
+	if (!rgba || !ConvertToRGBA(rgba)) {
+		free(rgba);
+		return;
+	}
+
+	if (m_compositeTexture) {
+		p_backend->UpdateTexture(m_compositeTexture, width, height, rgba, false);
+	}
+	else {
+		m_compositeTexture = p_backend->CreateTexture(width, height, rgba, false);
+	}
+	free(rgba);
+	if (!m_compositeTexture) {
+		return;
+	}
+
+	// Fullscreen quad in the logical coordinate space, on top of everything.
+	float w = (float) p_backend->m_width;
+	float h = (float) p_backend->m_height;
+	D3DTLVERTEX vertices[4];
+	memset(vertices, 0, sizeof(vertices));
+	for (int i = 0; i < 4; i++) {
+		vertices[i].sx = (i == 1 || i == 3) ? w : 0.0f;
+		vertices[i].sy = (i >= 2) ? h : 0.0f;
+		vertices[i].sz = 0.0f;
+		vertices[i].rhw = 1.0f;
+		vertices[i].color = 0xFFFFFFFF;
+		vertices[i].specular = 0;
+		vertices[i].tu = (i == 1 || i == 3) ? 1.0f : 0.0f;
+		vertices[i].tv = (i >= 2) ? 1.0f : 0.0f;
+	}
+	const Uint16 indices[6] = {0, 1, 2, 2, 1, 3};
+
+	MiniwinRasterState state;
+	state.zEnable = false;
+	state.zWrite = false;
+	state.alphaBlend = false;
+	state.cullMode = D3DCULL_NONE;
+	state.textured = true;
+	state.textureId = m_compositeTexture;
+	state.textureLinear = false;
+	state.textureWrap = false;
+	state.colorOp = MiniwinTextureOp::Texture;
+	state.alphaOp = MiniwinTextureOp::Texture;
+	p_backend->DrawTriangles(state, vertices, 4, indices, 6);
 }
 
 HRESULT MiniwinSurface::GetAttachedSurface(LPDDSCAPS2 lpDDSCaps, LPDIRECTDRAWSURFACE* lplpDDAttachedSurface)
@@ -195,6 +261,9 @@ HRESULT MiniwinSurface::Unlock(LPRECT lpRect)
 {
 	if (m_kind == MiniwinSurfaceKind::Texture) {
 		m_textureDirty = true;
+	}
+	else {
+		m_pixelsDirty = true;
 	}
 	return DD_OK;
 }

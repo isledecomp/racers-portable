@@ -47,6 +47,11 @@ struct MiniwinSurface : public IDirectDrawSurface {
 	void EnsurePixels();
 	int BytesPerPixel() const;
 
+	// Draws the surface's CPU pixels into the render backend as a fullscreen quad.
+	// DirectDraw code paints the backbuffer directly (the pre-race loading screen
+	// bitmap); the backend never sees those writes otherwise.
+	void CompositeToBackend(MiniwinRenderBackend* p_backend);
+
 	// Converts the surface's pixels (palettized/16/32 bpp, honoring the color key) to
 	// tightly packed RGBA8. Returns false if there are no pixels yet.
 	bool ConvertToRGBA(void* p_out) const;
@@ -58,6 +63,8 @@ struct MiniwinSurface : public IDirectDrawSurface {
 	IDirectDrawPalette* m_palette = nullptr;
 	IDirectDrawClipper* m_clipper = nullptr;
 	DDCOLORKEY m_colorKey = {};
+	bool m_pixelsDirty = false;    // CPU writes not yet composited to the backend
+	Uint32 m_compositeTexture = 0; // scratch texture for CompositeToBackend
 	bool m_hasColorKey = false;
 	void* m_pixels = nullptr;
 	int m_pitch = 0;
