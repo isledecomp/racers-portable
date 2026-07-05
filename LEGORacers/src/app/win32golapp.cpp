@@ -83,7 +83,6 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 		Uint32 backendFlags = MiniwinBackend_PrepareWindowFlags();
 		window = SDL_CreateWindow(title, 640, 480, SDL_WINDOW_HIDDEN | backendFlags);
 		if (window) {
-			SDL_StartTextInput(window);
 			// The original hid the Win32 cursor over the client area (WM_SETCURSOR
 			// with a NULL class cursor); the game draws its own pointer.
 			SDL_HideCursor();
@@ -410,27 +409,40 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
 				NotifyCloseRequested();
 				break;
-			case SDL_EVENT_TEXT_INPUT:
-				if (m_eventHandler && event.text.text) {
-					for (const char* c = event.text.text; *c; c++) {
-						m_eventHandler->OnChar((undefined4) (unsigned char) *c);
-						m_eventHandler->VTable0x20((undefined4) (unsigned char) *c);
-					}
-				}
-				break;
 			case SDL_EVENT_KEY_DOWN:
-				// WM_CHAR carried control characters; SDL text input does not, so
-				// synthesize the ones the game's text fields react to.
+				// WM_CHAR equivalent, synthesized from key events. SDL text input is
+				// deliberately not used: staying an Input Method Kit client caused
+				// intermittent ~500 ms window-server stalls during races
+				// (IMKCFRunLoopWakeUpReliable mach port errors), and the game's text
+				// fields only take simple characters.
 				if (m_eventHandler) {
 					undefined4 ch = 0;
-					if (event.key.key == SDLK_RETURN) {
+					SDL_Keycode key = event.key.key;
+					if (key == SDLK_RETURN) {
 						ch = '\r';
 					}
-					else if (event.key.key == SDLK_BACKSPACE) {
+					else if (key == SDLK_BACKSPACE) {
 						ch = '\b';
 					}
-					else if (event.key.key == SDLK_ESCAPE) {
+					else if (key == SDLK_ESCAPE) {
 						ch = 0x1b;
+					}
+					else if (key >= 32 && key < 127) {
+						ch = (undefined4) key;
+						if (event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS)) {
+							if (key >= 'a' && key <= 'z') {
+								ch = (undefined4) (key - 'a' + 'A');
+							}
+							else if (event.key.mod & SDL_KMOD_SHIFT) {
+								// US-layout shifted symbols; enough for name entry.
+								const char* base = "1234567890-=[]\\;',./`";
+								const char* shifted = "!@#$%^&*()_+{}|:\"<>?~";
+								const char* hit = strchr(base, (int) key);
+								if (hit) {
+									ch = (undefined4) shifted[hit - base];
+								}
+							}
+						}
 					}
 					if (ch) {
 						m_eventHandler->OnChar(ch);
