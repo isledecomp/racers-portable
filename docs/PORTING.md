@@ -50,8 +50,8 @@ Lightly touched:
 - `LEGORacers/src/app/guids.cpp` — excluded from portable builds (miniwin owns GUID storage)
 - `LEGORacers/racers.rc` — Windows-resource icon; portable builds embed via SDL
 
-Excluded from portable builds (software rasterizer, deferred; compiled only in the legacy
-byte-match build): `GolDP/src/render/golrasterizers1.cpp`, `golrasterizers2.cpp`,
+Excluded from portable builds (software rasterizer, deferred):
+`GolDP/src/render/golrasterizers1.cpp`, `golrasterizers2.cpp`,
 `golsoftwarerenderer.cpp`, `golsoftwarematerial*.cpp`. The two `__declspec(naked)`
 functions there (`FUN_1003b930`, `FUN_1003ba30`) get equivalent-C++ rewrites when the
 software renderer milestone lands.
@@ -72,9 +72,13 @@ Conflicts should only ever appear in the files listed above. After merging, rebu
 run; if upstream renamed symbols used by `miniwin` glue or the rewritten files, fix those
 call sites (the decomp side wins naming).
 
-## Legacy byte-match build
+## Removed decompilation artifacts
 
-The original MSVC 6.0 + reccmp verification path is preserved behind the `RACERS_MSVC6`
-CMake option (auto-detected for MSVC 6 toolchains). It builds the DirectX-6 game against
-`3rdparty/dx6` exactly as the decomp repo does, so decomp merges can still be
-byte-verified from this fork.
+Byte-accuracy verification (reccmp), the MSVC 6.0 toolchain support, and related tooling
+live exclusively in the decompilation repository — they were removed from this fork
+(mirroring how isle-portable relates to isle): `reccmp/`, `reccmp-project.yml`,
+`cmake/reccmp.cmake`, the MSVC6/Wine `docker/` image, the patched `3rdparty/libcmt`, and
+the reccmp-oriented `tools/` scripts. The reccmp **annotations in the source code are
+kept** so upstream merges apply cleanly. `3rdparty/dx6` (the DirectX 6 SDK headers) is
+retained for a possible future native-DirectX Windows build, analogous to isle-portable's
+`3rdparty/dx5`.
