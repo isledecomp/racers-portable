@@ -1,3 +1,8 @@
+// [library:window] Rewritten on SDL3: window management, the message pump and
+// display-mode switching are replaced (the Win32 originals live in the decompilation
+// project); GolDP is linked directly instead of loaded via LoadLibrary. All
+// platform-neutral logic is kept verbatim.
+
 #include "app/win32golapp.h"
 
 #include "app/golappeventhandler.h"
@@ -9,6 +14,8 @@
 #include "input/mousedevice.h"
 #include "render/golcommondrawstate.h"
 
+#include <SDL3/SDL.h>
+#include <miniwin/miniwinapp.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +24,11 @@ extern HINSTANCE g_hInstance;
 extern HINSTANCE g_hPrevInstance;
 
 DECOMP_SIZE_ASSERT(Win32GolApp, 0x944)
+
+static SDL_Window* AppWindow(HWND p_hWnd)
+{
+	return reinterpret_cast<SDL_Window*>(p_hWnd);
+}
 
 // FUNCTION: LEGORACERS 0x004164d0
 Win32GolApp::Win32GolApp()
@@ -42,37 +54,8 @@ Win32GolApp::~Win32GolApp()
 // FUNCTION: LEGORACERS 0x004165e0
 void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fileName)
 {
-	LegoChar buffer[64];
-
 	if (m_flags & c_flagInitialized) {
 		Destroy();
-	}
-
-	if (!g_hPrevInstance) {
-		WNDCLASS wndClass;
-		wndClass.style = CS_HREDRAW | CS_VREDRAW;
-		wndClass.lpfnWndProc = AppWndProc;
-		wndClass.cbClsExtra = 0;
-		wndClass.cbWndExtra = 4;
-		wndClass.hInstance = g_hInstance;
-		wndClass.hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(ICON_RACERS));
-
-		if (!wndClass.hIcon) {
-			::sprintf(buffer, "Unable to load app icon\nError = 0x%x", GetLastError());
-			GOL_FATALERROR_MESSAGE(buffer);
-		}
-
-		wndClass.hCursor = LoadCursor(NULL, IDC_ARROW);
-		wndClass.hbrBackground = (HBRUSH) GetStockObject(BLACK_BRUSH);
-		wndClass.lpszMenuName = NULL;
-		wndClass.lpszClassName = "AolAppWinClass";
-
-		if (!RegisterClass(&wndClass)) {
-			::sprintf(buffer, "Unable to register app window class\nError = 0x%x", GetLastError());
-			GOL_FATALERROR_MESSAGE(buffer);
-		}
-
-		g_hPrevInstance = g_hInstance;
 	}
 
 	g_hashTable = &GolApp::GetHashTable();
@@ -83,21 +66,18 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 
 	m_fullscreenStyle = WS_POPUP | WS_CLIPCHILDREN;
 	m_windowedStyle = WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN;
-	m_hWnd = CreateWindowEx(
-		0,
-		"AolAppWinClass",
-		p_windowName,
-		WS_POPUP | WS_CLIPCHILDREN,
-		0,
-		0,
-		0,
-		0,
-		NULL,
-		NULL,
-		g_hInstance,
-		NULL
-	);
 
+	SDL_Window* window = nullptr;
+	char title[128];
+	SDL_strlcpy(title, p_windowName ? p_windowName : "LEGO Racers", sizeof(title));
+	MiniwinApp_RunOnMainThread([&window, &title]() {
+		window = SDL_CreateWindow(title, 640, 480, SDL_WINDOW_HIDDEN);
+		if (window) {
+			SDL_StartTextInput(window);
+		}
+	});
+
+	m_hWnd = reinterpret_cast<HWND>(window);
 	if (!m_hWnd) {
 		GOL_FATALERROR_MESSAGE("Unable to create application window");
 	}
@@ -105,8 +85,6 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 	LoadGolLibrary();
 	InitializeInput();
 	m_golDrawState->SetWindowHandle(m_hWnd);
-	SetWindowLong(m_hWnd, 0, (LONG) this);
-	ShowWindow(m_hWnd, SW_SHOW);
 	m_lastFrameTimeMs = timeGetTime();
 	m_windowMode = c_windowModeNone;
 	m_flags |= c_flagInitialized;
@@ -132,7 +110,8 @@ void Win32GolApp::Destroy()
 	ShutdownDisplay();
 
 	if (m_hWnd) {
-		DestroyWindow(m_hWnd);
+		SDL_Window* window = AppWindow(m_hWnd);
+		MiniwinApp_RunOnMainThread([window]() { SDL_DestroyWindow(window); });
 		m_hWnd = 0;
 	}
 
@@ -196,35 +175,15 @@ void Win32GolApp::AddFileSourcesFromList(const LegoChar* p_fileList)
 // FUNCTION: LEGORACERS 0x00416960
 void Win32GolApp::LoadGolLibrary()
 {
-	LegoChar buffer[100];
 	GolImport golImport;
 
-	if (m_golBackendType & c_golBackendGlide) {
-		m_golLibrary = LoadLibrary("GolGlide.DLL");
-	}
-	else if (m_golBackendType & c_golBackendSoft) {
-		m_golLibrary = LoadLibrary("GolSoft.DLL");
-	}
-	else if (m_golBackendType & c_golBackendD3D) {
-		m_golLibrary = LoadLibrary("GolD3D.DLL");
-	}
-	else {
-		m_golLibrary = LoadLibrary("GolDP.DLL");
-	}
-
-	if (m_golLibrary == NULL) {
-		::sprintf(buffer, "Unable to find a valid Gol DLL\nError Code = %d", GetLastError());
-		GOL_FATALERROR_MESSAGE(buffer);
-	}
-
-	GolEntryCBFN* golEntry = (GolEntryCBFN*) GetProcAddress(m_golLibrary, "GolEntry");
-	if (golEntry == NULL) {
-		GOL_FATALERROR_MESSAGE("Invalid Gol DLL - cannot call entry procedure");
-	}
+	// GolDP is linked into the application; the original selected between
+	// GolGlide/GolSoft/GolD3D/GolDP DLLs at runtime here.
+	m_golLibrary = reinterpret_cast<HMODULE>(1);
 
 	CreateGolImport(&golImport);
 	golImport.m_fatalErrorMessage = GolFatalErrorMessage;
-	m_golExport = golEntry(&golImport);
+	m_golExport = GolEntry(&golImport);
 	m_golDrawState = m_golExport->GetDrawState();
 }
 
@@ -234,14 +193,7 @@ void Win32GolApp::UnloadGolLibrary()
 	m_golDrawState = NULL;
 
 	if (m_golLibrary) {
-		GolExitCBFN* golExit = (GolExitCBFN*) GetProcAddress(m_golLibrary, "GolExit");
-
-		if (golExit == NULL) {
-			GOL_FATALERROR_MESSAGE("Invalid Gol DLL - cannot call exit procedure");
-		}
-
-		golExit();
-		FreeLibrary(m_golLibrary);
+		GolExit();
 		m_golLibrary = NULL;
 	}
 }
@@ -272,6 +224,29 @@ void Win32GolApp::InitializeDisplayWithDevice(
 	InitializeDisplay(p_width, p_height, p_bpp, p_flags | c_flagDeviceSelected);
 }
 
+// Applies the current windowed/fullscreen state to the SDL window.
+void Win32GolApp_ApplyWindowMode(HWND p_hWnd, LegoBool32 p_fullscreen, LegoU32 p_width, LegoU32 p_height)
+{
+	SDL_Window* window = AppWindow(p_hWnd);
+	if (!window) {
+		return;
+	}
+
+	MiniwinApp_RunOnMainThread([window, p_fullscreen, p_width, p_height]() {
+		if (p_fullscreen) {
+			SDL_SetWindowSize(window, (int) p_width, (int) p_height);
+			SDL_SetWindowFullscreen(window, true);
+		}
+		else {
+			SDL_SetWindowFullscreen(window, false);
+			SDL_SetWindowSize(window, (int) p_width, (int) p_height);
+			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+		}
+		SDL_ShowWindow(window);
+		SDL_RaiseWindow(window);
+	});
+}
+
 // FUNCTION: LEGORACERS 0x00416b00
 LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU32 p_bpp, LegoU32 p_flags)
 {
@@ -293,7 +268,7 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 
 	GolCommonDrawState* commonState = static_cast<GolCommonDrawState*>(m_golDrawState);
 	Win32GolApp::m_renderer = commonState->m_currentRenderer;
-	m_unk0x808 = (undefined4) m_golDrawState->m_displaySurface;
+	m_unk0x808 = m_golDrawState->m_displaySurface ? 1 : 0;
 
 	if (m_golDrawState->m_flags & GolDrawState::c_flagHardwareDevice) {
 		m_flags |= c_flagFullscreen;
@@ -301,51 +276,13 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 
 	if (!(m_flags & c_flagFullscreen)) {
 		m_windowMode = c_windowModeWindowed;
-		SetWindowLong(m_hWnd, GWL_STYLE, (LONG) m_windowedStyle);
-
-		RECT rect;
-		rect.left = 0;
-		rect.right = p_width;
-		rect.top = 0;
-		rect.bottom = p_height;
-		AdjustWindowRect(&rect, m_windowedStyle, FALSE);
-
-		LegoS32 w = rect.right - rect.left;
-		LegoS32 h = rect.bottom - rect.top;
-		LegoS32 screenW = GetSystemMetrics(SM_CXSCREEN);
-		LegoS32 screenH = GetSystemMetrics(SM_CYSCREEN);
-		if (w > screenW) {
-			w = screenW;
-		}
-		if (h > screenH) {
-			h = screenH;
-		}
-		SetWindowPos(m_hWnd, NULL, 0, 0, w, h, SWP_SHOWWINDOW);
+		Win32GolApp_ApplyWindowMode(m_hWnd, FALSE, p_width, p_height);
 	}
 	else {
 		m_windowMode = c_windowModeFullscreen;
-		SetWindowLong(m_hWnd, GWL_STYLE, (LONG) m_fullscreenStyle);
-
-		if (m_flags & c_flagBit8) {
-			SetWindowPos(m_hWnd, NULL, 0, 0, 0, 0, SWP_SHOWWINDOW);
-		}
-		else {
-			GetInputManager()->GetMouse()->SetNonExclusiveMode();
-			SetWindowPos(
-				m_hWnd,
-				NULL,
-				0,
-				0,
-				GetSystemMetrics(SM_CXSCREEN),
-				GetSystemMetrics(SM_CYSCREEN),
-				SWP_SHOWWINDOW
-			);
-		}
+		GetInputManager()->GetMouse()->SetNonExclusiveMode();
+		Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, p_width, p_height);
 	}
-
-	SetWindowLong(m_hWnd, 0, (LONG) this);
-	UpdateWindow(m_hWnd);
-	SetFocus(m_hWnd);
 
 	m_windowStateChanging = FALSE;
 	m_flags |= c_flagDisplayActive;
@@ -432,14 +369,79 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 	m_eventHandler = p_eventHandler;
 	UpdateMousePosition();
 
-	MSG msg;
-	while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-		if (msg.message == WM_QUIT) {
-			SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
+	// Replaces the PeekMessage pump + AppWndProc: SDL events (forwarded from the main
+	// thread) are dispatched to the same GolAppEventHandler notifications the Win32
+	// window procedure produced.
+	SDL_Event event;
+	while (MiniwinApp_PollEvent(event)) {
+		switch (event.type) {
+		case SDL_EVENT_QUIT:
+			// WM_QUIT equivalent.
+			m_eventHandler = 0;
 			return 0;
+		case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+			NotifyCloseRequested();
+			break;
+		case SDL_EVENT_TEXT_INPUT:
+			if (m_eventHandler && event.text.text) {
+				for (const char* c = event.text.text; *c; c++) {
+					m_eventHandler->OnChar((undefined4) (unsigned char) *c);
+					m_eventHandler->VTable0x20((undefined4) (unsigned char) *c);
+				}
+			}
+			break;
+		case SDL_EVENT_KEY_DOWN:
+			// WM_CHAR carried control characters; SDL text input does not, so
+			// synthesize the ones the game's text fields react to.
+			if (event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)) {
+				ToggleFullscreen();
+			}
+			else if (m_eventHandler) {
+				undefined4 ch = 0;
+				if (event.key.key == SDLK_RETURN) {
+					ch = '\r';
+				}
+				else if (event.key.key == SDLK_BACKSPACE) {
+					ch = '\b';
+				}
+				else if (event.key.key == SDLK_ESCAPE) {
+					ch = 0x1b;
+				}
+				if (ch) {
+					m_eventHandler->OnChar(ch);
+					m_eventHandler->VTable0x20(ch);
+				}
+			}
+			break;
+		case SDL_EVENT_WINDOW_FOCUS_LOST:
+			// WM_ACTIVATEAPP(FALSE) equivalent.
+			if ((m_flags & c_flagDisplayActive) && !m_disabled) {
+				OutputDebugString("Deactivate App\n");
+				OnAppDeactivated();
+				if (m_eventHandler) {
+					m_eventHandler->OnAppDeactivated();
+				}
+				m_disabled = TRUE;
+				m_pollInput = 0;
+				m_inputManager.SuspendActiveDevices();
+			}
+			break;
+		case SDL_EVENT_WINDOW_FOCUS_GAINED:
+			// WM_ACTIVATEAPP(TRUE) / WM_SIZE(SIZE_RESTORED) equivalent.
+			if ((m_flags & c_flagDisplayActive) && m_disabled) {
+				OutputDebugString("Activate App\n");
+				OnAppActivated();
+				m_disabled = FALSE;
+				m_pollInput = 1;
+				m_inputManager.RestoreSuspendedDevices();
+				if (m_eventHandler) {
+					m_eventHandler->OnAppActivated();
+				}
+			}
+			break;
+		default:
+			break;
 		}
-		TranslateMessage(&msg);
-		DispatchMessage(&msg);
 	}
 
 	DWORD time = timeGetTime();
@@ -503,55 +505,13 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 			OutputDebugString("--from full screen\n");
 			m_flags |= c_flagFullscreen;
 			m_windowMode = c_windowModeFullscreen;
-			SetWindowLong(m_hWnd, GWL_STYLE, (LONG) m_fullscreenStyle);
-			if (m_flags & c_flagBit8) {
-				SetWindowPos(m_hWnd, NULL, 0, 0, 0, 0, SWP_SHOWWINDOW);
-			}
-			else {
-				GetInputManager()->GetMouse()->SetNonExclusiveMode();
-				SetWindowPos(
-					m_hWnd,
-					NULL,
-					0,
-					0,
-					GetSystemMetrics(SM_CXSCREEN),
-					GetSystemMetrics(SM_CYSCREEN),
-					SWP_SHOWWINDOW
-				);
-			}
+			GetInputManager()->GetMouse()->SetNonExclusiveMode();
+			Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
 		}
 		else {
 			m_flags &= ~c_flagFullscreen;
 			m_windowMode = c_windowModeWindowed;
-			SetWindowLong(m_hWnd, GWL_STYLE, (LONG) m_windowedStyle);
-
-			RECT rect;
-			rect.left = 0;
-			rect.right = m_width;
-			rect.top = 0;
-			rect.bottom = m_height;
-			AdjustWindowRect(&rect, m_windowedStyle, FALSE);
-
-			LegoS32 w = rect.right - rect.left;
-			LegoS32 h = rect.bottom - rect.top;
-			LegoS32 screenW = GetSystemMetrics(SM_CXSCREEN);
-			LegoS32 screenH = GetSystemMetrics(SM_CYSCREEN);
-			LegoS32 x, y;
-			if (w > screenW) {
-				w = screenW;
-				x = 0;
-			}
-			else {
-				x = (screenW - w) >> 1;
-			}
-			if (h > screenH) {
-				h = screenH;
-				y = 0;
-			}
-			else {
-				y = (screenH - h) >> 1;
-			}
-			SetWindowPos(m_hWnd, NULL, x, y, w, h, SWP_SHOWWINDOW);
+			Win32GolApp_ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
 		}
 
 		if (m_eventHandler) {
@@ -563,22 +523,8 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 		m_flags |= c_flagFullscreen;
 		LegoU32 fullscreenFlags = drawFlags | (GolDrawState::c_flagHardwareDevice | GolDrawState::c_flagBit10);
 		m_windowMode = c_windowModeFullscreen;
-		SetWindowLong(m_hWnd, GWL_STYLE, (LONG) m_fullscreenStyle);
-		if (m_flags & c_flagBit8) {
-			SetWindowPos(m_hWnd, NULL, 0, 0, 0, 0, SWP_SHOWWINDOW);
-		}
-		else {
-			GetInputManager()->GetMouse()->SetNonExclusiveMode();
-			SetWindowPos(
-				m_hWnd,
-				NULL,
-				0,
-				0,
-				GetSystemMetrics(SM_CXSCREEN),
-				GetSystemMetrics(SM_CYSCREEN),
-				SWP_SHOWWINDOW
-			);
-		}
+		GetInputManager()->GetMouse()->SetNonExclusiveMode();
+		Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
 
 		m_golDrawState->CreateDisplay(m_width, m_height, m_bpp, fullscreenFlags);
 
@@ -588,196 +534,12 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 	}
 	else if (p_mode == c_windowModeMinimized) {
 		OutputDebugString("--to minimized\n");
-		ShowWindow(m_hWnd, SW_SHOWMINNOACTIVE);
+		SDL_Window* window = AppWindow(m_hWnd);
+		MiniwinApp_RunOnMainThread([window]() { SDL_MinimizeWindow(window); });
 		m_windowMode = c_windowModeMinimized;
 	}
 
-	UpdateWindow(m_hWnd);
-	SetFocus(m_hWnd);
 	m_windowStateChanging = FALSE;
-}
-
-// FUNCTION: LEGORACERS 0x00417330
-LRESULT CALLBACK Win32GolApp::AppWndProc(HWND p_hWnd, UINT p_msg, WPARAM p_wParam, LPARAM p_lParam)
-{
-	Win32GolApp* self = (Win32GolApp*) GetWindowLong(p_hWnd, 0);
-	if (!self) {
-		return DefWindowProc(p_hWnd, p_msg, p_wParam, p_lParam);
-	}
-
-	switch (p_msg) {
-	case WM_ACTIVATE:
-		if (!(self->m_flags & Win32GolApp::c_flagDisplayActive)) {
-			break;
-		}
-
-		if (LOWORD(p_wParam) == WA_INACTIVE) {
-			OutputDebugString("Deactivate Window\n");
-			if (!self->m_disabled) {
-				OutputDebugString("--App was enabled\n");
-				self->OnAppDeactivated();
-				if (self->m_eventHandler) {
-					self->m_eventHandler->OnAppDeactivated();
-				}
-			}
-		}
-		else {
-			OutputDebugString("Activate Window\n");
-			if (self->m_disabled) {
-				OutputDebugString("--App was disabled\n");
-			}
-			else {
-				OutputDebugString("--App was enabled\n");
-				if (self->m_flags & Win32GolApp::c_flagFullscreen) {
-					OutputDebugString("--Telling the window to maximize\n");
-					ShowWindow(self->m_hWnd, SW_MAXIMIZE);
-				}
-			}
-		}
-		break;
-	case WM_CLOSE:
-		self->NotifyCloseRequested();
-		break;
-	case WM_DESTROY:
-		SetWindowLong(p_hWnd, 0, 0);
-		self->NotifyCloseRequested();
-		SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-		PostQuitMessage(0);
-		break;
-	case WM_MOVE:
-	case WM_SETFOCUS:
-	case WM_KILLFOCUS:
-		break;
-	case WM_SIZE:
-		if (self->m_flags & Win32GolApp::c_flagDisplayActive) {
-			if (p_wParam == SIZE_MAXIMIZED || p_wParam == SIZE_RESTORED) {
-				OutputDebugString("Maximizing App\n");
-				if (self->m_disabled) {
-					OutputDebugString("--App was disabled\n");
-					self->OnAppActivated();
-					self->m_disabled = FALSE;
-					self->m_pollInput = 1;
-					self->m_inputManager.RestoreSuspendedDevices();
-					SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS);
-					if (self->m_flags & Win32GolApp::c_flagFullscreen) {
-						OutputDebugString("--Telling the window to maximize\n");
-						ShowWindow(self->m_hWnd, SW_MAXIMIZE);
-					}
-				}
-
-				if (self->m_eventHandler) {
-					self->m_eventHandler->OnAppActivated();
-				}
-
-				if (self->m_windowMode == Win32GolApp::c_windowModeMinimized ||
-					self->m_windowMode == Win32GolApp::c_windowModeNone) {
-					OutputDebugString("--App was minimized.  Resetting.\n");
-					if (self->m_flags & Win32GolApp::c_flagFullscreen) {
-						self->ChangeWindowState(Win32GolApp::c_windowModeFullscreen);
-					}
-					else {
-						self->ChangeWindowState(Win32GolApp::c_windowModeWindowed);
-					}
-				}
-			}
-			else if (p_wParam == SIZE_MINIMIZED) {
-				OutputDebugString("Minimizing App\n");
-			}
-		}
-	case WM_SIZING:
-	case WM_MOVING:
-		if ((self->m_flags & Win32GolApp::c_flagDisplayActive) &&
-			self->m_windowMode == Win32GolApp::c_windowModeFullscreen) {
-			if (self->m_flags & Win32GolApp::c_flagBit8) {
-				SetWindowPos(p_hWnd, NULL, 0, 0, 0, 0, SWP_SHOWWINDOW);
-			}
-			else {
-				self->GetInputManager()->GetMouse()->SetNonExclusiveMode();
-				SetWindowPos(
-					p_hWnd,
-					NULL,
-					0,
-					0,
-					GetSystemMetrics(SM_CXSCREEN),
-					GetSystemMetrics(SM_CYSCREEN),
-					SWP_SHOWWINDOW
-				);
-			}
-		}
-		break;
-	case WM_PAINT: {
-		RECT rect;
-		PAINTSTRUCT paint;
-
-		if (GetUpdateRect(p_hWnd, &rect, FALSE)) {
-			HDC hdc = BeginPaint(p_hWnd, &paint);
-			if (!(self->m_golDrawState->GetFlags() & GolDrawState::c_flagCreated)) {
-				FillRect(hdc, &rect, (HBRUSH) GetStockObject(BLACK_BRUSH));
-			}
-
-			EndPaint(p_hWnd, &paint);
-		}
-
-		break;
-	}
-	case WM_ACTIVATEAPP:
-		if (self->m_flags & Win32GolApp::c_flagDisplayActive) {
-			if (!p_wParam) {
-				OutputDebugString("Deactivate App\n");
-				if (!self->m_disabled) {
-					OutputDebugString("--App was enabled\n");
-					self->OnAppDeactivated();
-					if (self->m_eventHandler) {
-						self->m_eventHandler->OnAppDeactivated();
-					}
-					self->ChangeWindowState(Win32GolApp::c_windowModeMinimized);
-					self->m_disabled = TRUE;
-					self->m_pollInput = 0;
-					self->m_inputManager.SuspendActiveDevices();
-					SetPriorityClass(GetCurrentProcess(), NORMAL_PRIORITY_CLASS);
-				}
-			}
-			else {
-				OutputDebugString("Activate App\n");
-				if (self->m_disabled) {
-					OutputDebugString("--App was disabled\n");
-				}
-			}
-		}
-
-		break;
-	case WM_CHAR:
-		if (self->m_eventHandler) {
-			self->m_eventHandler->OnChar(p_wParam);
-			self->m_eventHandler->VTable0x20(p_wParam);
-		}
-
-		break;
-	case WM_SETCURSOR:
-		if (self->IsCursorInClientArea(p_hWnd)) {
-			SetCursor(self->m_hCursor);
-		}
-
-		return 1;
-	case WM_SYSCOMMAND:
-		if (p_wParam != SC_SCREENSAVE) {
-			return DefWindowProc(p_hWnd, WM_SYSCOMMAND, p_wParam, p_lParam);
-		}
-
-		break;
-	case WM_SYSKEYDOWN:
-		break;
-	case WM_SYSKEYUP:
-		break;
-	case WM_COMMAND:
-		break;
-	case WM_QUERYNEWPALETTE:
-		break;
-	default:
-		return DefWindowProc(p_hWnd, p_msg, p_wParam, p_lParam);
-	}
-
-	return 0;
 }
 
 // FUNCTION: LEGORACERS 0x00417900

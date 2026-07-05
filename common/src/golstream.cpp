@@ -376,12 +376,13 @@ LegoS32 GolStream::BufferedRead(LegoU32 p_offset, void* p_buf, LegoU32 p_size, L
 		if (!result) {
 			while (TRUE) {
 				LegoU32 bytesRead = p_offset;
-				LegoU32 bufPtr = (LegoU32) m_buffer;
+				// 64-bit compatibility: pointer arithmetic via pointer-sized integers.
+				uintptr_t bufPtr = (uintptr_t) m_buffer;
 				m_flags |= c_flagCached;
 				LegoS32 pos = m_position;
 				m_bufferStart = pos;
 				LegoU32 bufEnd = pos + bytesRead;
-				LegoU32 srcOff = bufPtr - pos;
+				uintptr_t srcOff = bufPtr - pos;
 				LegoU8* src = (LegoU8*) (offset + srcOff);
 				m_bufferEnd = bufEnd;
 
@@ -465,10 +466,11 @@ LegoS32 GolStream::ReadLine(void* p_buf, LegoU32 p_size)
 			p_size = size - pos;
 		}
 
-		result = g_fileSources[m_handle].Read(pos + m_position, p_buf, p_size, maxSize, (LegoS32*) &p_buf);
+		// 64-bit compatibility: the original reused the p_buf stack slot for this out-param.
+		result = g_fileSources[m_handle].Read(pos + m_position, p_buf, p_size, maxSize, &bytesRead);
 
 		if (!result) {
-			m_unk0x10 += (LegoS32) p_buf;
+			m_unk0x10 += bytesRead;
 			return e_ioSuccess;
 		}
 	}

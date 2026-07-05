@@ -170,6 +170,8 @@ LegoS32 GolFileSource::Read(LegoU32 p_offset, void* p_buf, LegoU32 p_size, LegoU
 	LegoU32 remaining = p_size;
 	LegoS32 crFlag = 0;
 	LegoU32 total = 0;
+	// 64-bit compatibility: the original reused the p_buf stack slot for this out-param.
+	LegoS32 bytesRead = 0;
 
 	while (TRUE) {
 		LegoU32 chunkSize = remaining;
@@ -177,12 +179,12 @@ LegoS32 GolFileSource::Read(LegoU32 p_offset, void* p_buf, LegoU32 p_size, LegoU
 			chunkSize = GolStream::c_lineReadChunkSize;
 		}
 
-		LegoS32 result = m_stream->BufferedRead(scanPos + p_offset, &buf[scanPos], chunkSize, (LegoS32*) &p_buf);
+		LegoS32 result = m_stream->BufferedRead(scanPos + p_offset, &buf[scanPos], chunkSize, &bytesRead);
 		if (result) {
 			return result;
 		}
 
-		total += (LegoU32) p_buf;
+		total += (LegoU32) bytesRead;
 
 		if (scanPos < total) {
 			while (TRUE) {
@@ -219,7 +221,7 @@ LegoS32 GolFileSource::Read(LegoU32 p_offset, void* p_buf, LegoU32 p_size, LegoU
 
 		remaining -= chunkSize;
 
-		if (!remaining && (LegoU32) p_buf >= chunkSize) {
+		if (!remaining && (LegoU32) bytesRead >= chunkSize) {
 			if (!total) {
 				*p_lenRead = 0;
 				buf[0] = 0;

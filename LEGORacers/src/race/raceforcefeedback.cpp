@@ -356,7 +356,9 @@ void RaceForceFeedback::CreateEngineEffect()
 // FUNCTION: LEGORACERS 0x004222b0
 undefined4 RaceForceFeedback::UpdateEngineEffect(LegoFloat p_forwardSpeed)
 {
-	undefined4 result = (undefined4) m_device;
+	// 64-bit compatibility: the original returned the device pointer here; only its
+	// truthiness is meaningful.
+	undefined4 result = m_device != NULL;
 	if (!m_device) {
 		return result;
 	}

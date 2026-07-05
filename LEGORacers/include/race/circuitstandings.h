@@ -16,7 +16,8 @@ public:
 	~CircuitStandings();
 
 	void Reset();
-	undefined4 SetContext(LegoRacers::Context* p_context);
+	// Returns the previous context; typed as a pointer for 64-bit compatibility.
+	LegoRacers::Context* SetContext(LegoRacers::Context* p_context);
 	void Shutdown();
 	LegoU32 GetPoints(LegoU32 p_index);
 	LegoS32 GetRank(LegoU32 p_index);

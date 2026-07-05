@@ -1,0 +1,486 @@
+#pragma once
+
+// [library:3d] Direct3D immediate mode (DirectX 6) subset used by GolDP.
+// The game does its own transform & lighting and only submits pre-transformed
+// D3DTLVERTEX triangles; the emulated device is a pure rasterizer state machine
+// backed by the miniwin render backends (SDL3 GPU / OpenGL / OpenGL ES).
+
+#include "ddraw.h"
+#include "windows.h"
+
+#define D3D_OK ((HRESULT) 0)
+#define D3DERR_GENERIC E_FAIL
+
+// --- Scalar types ---
+typedef float D3DVALUE;
+typedef DWORD D3DCOLOR;
+typedef DWORD D3DMATERIALHANDLE;
+typedef DWORD D3DTEXTUREHANDLE;
+typedef DWORD D3DVIEWPORTHANDLE;
+
+#define RGBA_MAKE(r, g, b, a)                                                                                          \
+	((D3DCOLOR) (((DWORD) (a) << 24) | ((DWORD) (r) << 16) | ((DWORD) (g) << 8) | (DWORD) (b)))
+#define D3DRGBA(r, g, b, a)                                                                                            \
+	RGBA_MAKE((DWORD) ((r) * 255.f), (DWORD) ((g) * 255.f), (DWORD) ((b) * 255.f), (DWORD) ((a) * 255.f))
+#define D3DRGB(r, g, b) D3DRGBA(r, g, b, 1.f)
+
+// --- Basic structs ---
+struct D3DRECT {
+	union {
+		LONG x1;
+		LONG lX1;
+	};
+	union {
+		LONG y1;
+		LONG lY1;
+	};
+	union {
+		LONG x2;
+		LONG lX2;
+	};
+	union {
+		LONG y2;
+		LONG lY2;
+	};
+};
+typedef D3DRECT* LPD3DRECT;
+
+struct D3DCOLORVALUE {
+	union {
+		D3DVALUE r;
+		D3DVALUE dvR;
+	};
+	union {
+		D3DVALUE g;
+		D3DVALUE dvG;
+	};
+	union {
+		D3DVALUE b;
+		D3DVALUE dvB;
+	};
+	union {
+		D3DVALUE a;
+		D3DVALUE dvA;
+	};
+};
+
+struct D3DMATERIAL {
+	DWORD dwSize;
+	union {
+		D3DCOLORVALUE diffuse;
+		D3DCOLORVALUE dcvDiffuse;
+	};
+	union {
+		D3DCOLORVALUE ambient;
+		D3DCOLORVALUE dcvAmbient;
+	};
+	union {
+		D3DCOLORVALUE specular;
+		D3DCOLORVALUE dcvSpecular;
+	};
+	union {
+		D3DCOLORVALUE emissive;
+		D3DCOLORVALUE dcvEmissive;
+	};
+	union {
+		D3DVALUE power;
+		D3DVALUE dvPower;
+	};
+	D3DTEXTUREHANDLE hTexture;
+	DWORD dwRampSize;
+};
+typedef D3DMATERIAL* LPD3DMATERIAL;
+
+struct D3DVIEWPORT2 {
+	DWORD dwSize;
+	DWORD dwX;
+	DWORD dwY;
+	DWORD dwWidth;
+	DWORD dwHeight;
+	D3DVALUE dvClipX;
+	D3DVALUE dvClipY;
+	D3DVALUE dvClipWidth;
+	D3DVALUE dvClipHeight;
+	D3DVALUE dvMinZ;
+	D3DVALUE dvMaxZ;
+};
+typedef D3DVIEWPORT2* LPD3DVIEWPORT2;
+
+struct D3DTLVERTEX {
+	union {
+		D3DVALUE sx;
+		D3DVALUE dvSX;
+	};
+	union {
+		D3DVALUE sy;
+		D3DVALUE dvSY;
+	};
+	union {
+		D3DVALUE sz;
+		D3DVALUE dvSZ;
+	};
+	union {
+		D3DVALUE rhw;
+		D3DVALUE dvRHW;
+	};
+	union {
+		D3DCOLOR color;
+		D3DCOLOR dcColor;
+	};
+	union {
+		D3DCOLOR specular;
+		D3DCOLOR dcSpecular;
+	};
+	union {
+		D3DVALUE tu;
+		D3DVALUE dvTU;
+	};
+	union {
+		D3DVALUE tv;
+		D3DVALUE dvTV;
+	};
+};
+typedef D3DTLVERTEX* LPD3DTLVERTEX;
+
+// --- Caps ---
+struct D3DPRIMCAPS {
+	DWORD dwSize;
+	DWORD dwMiscCaps;
+	DWORD dwRasterCaps;
+	DWORD dwZCmpCaps;
+	DWORD dwSrcBlendCaps;
+	DWORD dwDestBlendCaps;
+	DWORD dwAlphaCmpCaps;
+	DWORD dwShadeCaps;
+	DWORD dwTextureCaps;
+	DWORD dwTextureFilterCaps;
+	DWORD dwTextureBlendCaps;
+	DWORD dwTextureAddressCaps;
+	DWORD dwStippleWidth;
+	DWORD dwStippleHeight;
+};
+
+typedef enum {
+	D3DCOLOR_MONO = 1,
+	D3DCOLOR_RGB = 2,
+} D3DCOLORMODEL;
+
+struct D3DDEVICEDESC {
+	DWORD dwSize;
+	DWORD dwFlags;
+	D3DCOLORMODEL dcmColorModel;
+	DWORD dwDevCaps;
+	DWORD dwTransformCaps;
+	BOOL bClipping;
+	DWORD dwLightingCaps;
+	D3DPRIMCAPS dpcLineCaps;
+	D3DPRIMCAPS dpcTriCaps;
+	DWORD dwDeviceRenderBitDepth;
+	DWORD dwDeviceZBufferBitDepth;
+	DWORD dwMaxBufferSize;
+	DWORD dwMaxVertexCount;
+	DWORD dwMinTextureWidth;
+	DWORD dwMinTextureHeight;
+	DWORD dwMaxTextureWidth;
+	DWORD dwMaxTextureHeight;
+	DWORD dwMinStippleWidth;
+	DWORD dwMaxStippleWidth;
+	DWORD dwMinStippleHeight;
+	DWORD dwMaxStippleHeight;
+};
+typedef D3DDEVICEDESC* LPD3DDEVICEDESC;
+
+#define D3DDD_COLORMODEL 0x00000001
+#define D3DDD_DEVCAPS 0x00000002
+#define D3DDD_TRANSFORMCAPS 0x00000004
+#define D3DDD_LIGHTINGCAPS 0x00000008
+#define D3DDD_BCLIPPING 0x00000010
+#define D3DDD_LINECAPS 0x00000020
+#define D3DDD_TRICAPS 0x00000040
+#define D3DDD_DEVICERENDERBITDEPTH 0x00000080
+#define D3DDD_DEVICEZBUFFERBITDEPTH 0x00000100
+
+#define D3DDEVCAPS_TEXTURESYSTEMMEMORY 0x00000100
+#define D3DDEVCAPS_TEXTUREVIDEOMEMORY 0x00000200
+
+#define D3DPMISCCAPS_CULLCW 0x00000040
+#define D3DPMISCCAPS_CULLCCW 0x00000080
+
+#define D3DPRASTERCAPS_DITHER 0x00000001
+#define D3DPRASTERCAPS_SUBPIXEL 0x00000020
+#define D3DPRASTERCAPS_FOGTABLE 0x00000100
+#define D3DPRASTERCAPS_ZBUFFERLESSHSR 0x00008000
+#define D3DPRASTERCAPS_ANTIALIASSORTINDEPENDENT 0x00080000
+
+#define D3DPTEXTURECAPS_PERSPECTIVE 0x00000001
+#define D3DPTEXTURECAPS_ALPHA 0x00000004
+#define D3DPTEXTURECAPS_TRANSPARENCY 0x00000008
+
+#define D3DPTADDRESSCAPS_WRAP 0x00000001
+
+#define D3DPTFILTERCAPS_NEAREST 0x00000001
+#define D3DPTFILTERCAPS_LINEAR 0x00000002
+#define D3DPTFILTERCAPS_MIPNEAREST 0x00000004
+#define D3DPTFILTERCAPS_MIPLINEAR 0x00000008
+#define D3DPTFILTERCAPS_LINEARMIPNEAREST 0x00000010
+#define D3DPTFILTERCAPS_LINEARMIPLINEAR 0x00000020
+
+#define D3DPBLENDCAPS_ZERO 0x00000001
+#define D3DPBLENDCAPS_ONE 0x00000002
+#define D3DPBLENDCAPS_SRCCOLOR 0x00000004
+#define D3DPBLENDCAPS_INVSRCCOLOR 0x00000008
+#define D3DPBLENDCAPS_SRCALPHA 0x00000010
+#define D3DPBLENDCAPS_INVSRCALPHA 0x00000020
+#define D3DPBLENDCAPS_DESTALPHA 0x00000040
+#define D3DPBLENDCAPS_INVDESTALPHA 0x00000080
+#define D3DPBLENDCAPS_DESTCOLOR 0x00000100
+#define D3DPBLENDCAPS_INVDESTCOLOR 0x00000200
+#define D3DPBLENDCAPS_SRCALPHASAT 0x00000400
+
+#define D3DPCMPCAPS_NEVER 0x00000001
+#define D3DPCMPCAPS_LESS 0x00000002
+#define D3DPCMPCAPS_EQUAL 0x00000004
+#define D3DPCMPCAPS_LESSEQUAL 0x00000008
+#define D3DPCMPCAPS_GREATER 0x00000010
+#define D3DPCMPCAPS_NOTEQUAL 0x00000020
+#define D3DPCMPCAPS_GREATEREQUAL 0x00000040
+#define D3DPCMPCAPS_ALWAYS 0x00000080
+
+#define D3DPSHADECAPS_ALPHAFLATBLEND 0x00001000
+#define D3DPSHADECAPS_ALPHAFLATSTIPPLED 0x00002000
+#define D3DPSHADECAPS_ALPHAGOURAUDBLEND 0x00004000
+#define D3DPSHADECAPS_ALPHAGOURAUDSTIPPLED 0x00008000
+
+// --- Enums ---
+typedef enum {
+	D3DPT_POINTLIST = 1,
+	D3DPT_LINELIST = 2,
+	D3DPT_LINESTRIP = 3,
+	D3DPT_TRIANGLELIST = 4,
+	D3DPT_TRIANGLESTRIP = 5,
+	D3DPT_TRIANGLEFAN = 6,
+} D3DPRIMITIVETYPE;
+
+typedef enum {
+	D3DCULL_NONE = 1,
+	D3DCULL_CW = 2,
+	D3DCULL_CCW = 3,
+} D3DCULL;
+
+typedef enum {
+	D3DCMP_NEVER = 1,
+	D3DCMP_LESS = 2,
+	D3DCMP_EQUAL = 3,
+	D3DCMP_LESSEQUAL = 4,
+	D3DCMP_GREATER = 5,
+	D3DCMP_NOTEQUAL = 6,
+	D3DCMP_GREATEREQUAL = 7,
+	D3DCMP_ALWAYS = 8,
+} D3DCMPFUNC;
+
+typedef enum {
+	D3DBLEND_ZERO = 1,
+	D3DBLEND_ONE = 2,
+	D3DBLEND_SRCCOLOR = 3,
+	D3DBLEND_INVSRCCOLOR = 4,
+	D3DBLEND_SRCALPHA = 5,
+	D3DBLEND_INVSRCALPHA = 6,
+	D3DBLEND_DESTALPHA = 7,
+	D3DBLEND_INVDESTALPHA = 8,
+	D3DBLEND_DESTCOLOR = 9,
+	D3DBLEND_INVDESTCOLOR = 10,
+	D3DBLEND_SRCALPHASAT = 11,
+} D3DBLEND;
+
+typedef enum {
+	D3DSHADE_FLAT = 1,
+	D3DSHADE_GOURAUD = 2,
+} D3DSHADEMODE;
+
+typedef enum {
+	D3DFILL_POINT = 1,
+	D3DFILL_WIREFRAME = 2,
+	D3DFILL_SOLID = 3,
+} D3DFILLMODE;
+
+typedef enum {
+	D3DZB_FALSE = 0,
+	D3DZB_TRUE = 1,
+	D3DZB_USEW = 2,
+} D3DZBUFFERTYPE;
+
+typedef enum {
+	D3DANTIALIAS_NONE = 0,
+	D3DANTIALIAS_SORTDEPENDENT = 1,
+	D3DANTIALIAS_SORTINDEPENDENT = 2,
+} D3DANTIALIASMODE;
+
+typedef enum {
+	D3DTFG_POINT = 1,
+	D3DTFG_LINEAR = 2,
+} D3DTEXTUREMAGFILTER;
+
+typedef enum {
+	D3DTFN_POINT = 1,
+	D3DTFN_LINEAR = 2,
+} D3DTEXTUREMINFILTER;
+
+typedef enum {
+	D3DTOP_DISABLE = 1,
+	D3DTOP_SELECTARG1 = 2,
+	D3DTOP_SELECTARG2 = 3,
+	D3DTOP_MODULATE = 4,
+} D3DTEXTUREOP;
+
+typedef enum {
+	D3DTADDRESS_WRAP = 1,
+	D3DTADDRESS_MIRROR = 2,
+	D3DTADDRESS_CLAMP = 3,
+} D3DTEXTUREADDRESS;
+
+typedef enum {
+	D3DRENDERSTATE_TEXTUREPERSPECTIVE = 4,
+	D3DRENDERSTATE_ZENABLE = 7,
+	D3DRENDERSTATE_FILLMODE = 8,
+	D3DRENDERSTATE_SHADEMODE = 9,
+	D3DRENDERSTATE_ZWRITEENABLE = 14,
+	D3DRENDERSTATE_ALPHATESTENABLE = 15,
+	D3DRENDERSTATE_SRCBLEND = 19,
+	D3DRENDERSTATE_DESTBLEND = 20,
+	D3DRENDERSTATE_CULLMODE = 22,
+	D3DRENDERSTATE_ZFUNC = 23,
+	D3DRENDERSTATE_ALPHAREF = 24,
+	D3DRENDERSTATE_ALPHAFUNC = 25,
+	D3DRENDERSTATE_DITHERENABLE = 26,
+	D3DRENDERSTATE_ALPHABLENDENABLE = 27,
+	D3DRENDERSTATE_COLORKEYENABLE = 41,
+	D3DRENDERSTATE_ANTIALIAS = 2,
+	D3DRENDERSTATE_SPECULARENABLE = 29,
+	D3DRENDERSTATE_SUBPIXEL = 31,
+	D3DRENDERSTATE_STIPPLEDALPHA = 33,
+} D3DRENDERSTATETYPE;
+
+typedef enum {
+	D3DTSS_COLOROP = 1,
+	D3DTSS_COLORARG1 = 2,
+	D3DTSS_COLORARG2 = 3,
+	D3DTSS_ALPHAOP = 4,
+	D3DTSS_ALPHAARG1 = 5,
+	D3DTSS_ALPHAARG2 = 6,
+	D3DTSS_ADDRESS = 12,
+	D3DTSS_MAGFILTER = 16,
+	D3DTSS_MINFILTER = 17,
+} D3DTEXTURESTAGESTATETYPE;
+
+#define D3DTA_DIFFUSE 0x00000000
+#define D3DTA_CURRENT 0x00000001
+#define D3DTA_TEXTURE 0x00000002
+
+// --- FVF ---
+#define D3DFVF_XYZRHW 0x004
+#define D3DFVF_DIFFUSE 0x040
+#define D3DFVF_SPECULAR 0x080
+#define D3DFVF_TEX1 0x100
+#define D3DFVF_TLVERTEX (D3DFVF_XYZRHW | D3DFVF_DIFFUSE | D3DFVF_SPECULAR | D3DFVF_TEX1)
+
+// --- DrawPrimitive flags ---
+#define D3DDP_WAIT 0x00000001
+#define D3DDP_OUTOFORDER 0x00000002
+#define D3DDP_DONOTCLIP 0x00000004
+#define D3DDP_DONOTUPDATEEXTENTS 0x00000008
+#define D3DDP_DONOTLIGHT 0x00000010
+
+// --- Clear flags ---
+#define D3DCLEAR_TARGET 0x00000001
+#define D3DCLEAR_ZBUFFER 0x00000002
+
+struct IDirect3D3;
+struct IDirect3DDevice3;
+struct IDirect3DViewport3;
+struct IDirect3DMaterial3;
+
+// A texture surface doubles as the IDirect3DTexture2 interface (see ddraw.h).
+typedef IDirectDrawSurface IDirect3DTexture2;
+typedef IDirect3DTexture2* LPDIRECT3DTEXTURE2;
+
+typedef IDirect3D3* LPDIRECT3D3;
+typedef IDirect3DDevice3* LPDIRECT3DDEVICE3;
+typedef IDirect3DViewport3* LPDIRECT3DVIEWPORT3;
+typedef IDirect3DMaterial3* LPDIRECT3DMATERIAL3;
+
+extern const GUID IID_IDirect3D3;
+extern const GUID IID_IDirect3DTexture2;
+
+typedef HRESULT(CALLBACK* LPD3DENUMDEVICESCALLBACK)(
+	GUID* lpGuid,
+	LPSTR lpDeviceDescription,
+	LPSTR lpDeviceName,
+	LPD3DDEVICEDESC lpD3DHWDeviceDesc,
+	LPD3DDEVICEDESC lpD3DHELDeviceDesc,
+	LPVOID lpContext
+);
+typedef HRESULT(CALLBACK* LPD3DENUMPIXELFORMATSCALLBACK)(LPDDPIXELFORMAT lpDDPixFmt, LPVOID lpContext);
+
+struct IDirect3DViewport3 : virtual public IUnknown {
+	virtual HRESULT SetViewport2(LPD3DVIEWPORT2 lpData);
+	virtual HRESULT GetViewport2(LPD3DVIEWPORT2 lpData);
+	virtual HRESULT SetBackground(D3DMATERIALHANDLE hMat);
+	virtual HRESULT Clear(DWORD dwCount, LPD3DRECT lpRects, DWORD dwFlags);
+
+	D3DVIEWPORT2 m_viewport = {};
+	D3DMATERIALHANDLE m_background = 0;
+	IDirect3DDevice3* m_device = nullptr;
+};
+
+struct IDirect3DMaterial3 : virtual public IUnknown {
+	virtual HRESULT SetMaterial(LPD3DMATERIAL lpMat);
+	virtual HRESULT GetMaterial(LPD3DMATERIAL lpMat);
+	virtual HRESULT GetHandle(LPDIRECT3DDEVICE3 lpDirect3DDevice, D3DMATERIALHANDLE* lpHandle);
+
+	D3DMATERIAL m_material = {};
+	D3DMATERIALHANDLE m_handle = 0;
+};
+
+struct IDirect3DDevice3 : virtual public IUnknown {
+	virtual HRESULT AddViewport(LPDIRECT3DVIEWPORT3 lpDirect3DViewport);
+	virtual HRESULT DeleteViewport(LPDIRECT3DVIEWPORT3 lpDirect3DViewport);
+	virtual HRESULT SetCurrentViewport(LPDIRECT3DVIEWPORT3 lpDirect3DViewport);
+	virtual HRESULT EnumTextureFormats(LPD3DENUMPIXELFORMATSCALLBACK lpd3dEnumPixelProc, LPVOID lpArg);
+	virtual HRESULT GetCaps(LPD3DDEVICEDESC lpD3DHWDevDesc, LPD3DDEVICEDESC lpD3DHELDevDesc);
+	virtual HRESULT BeginScene();
+	virtual HRESULT EndScene();
+	virtual HRESULT SetRenderState(D3DRENDERSTATETYPE dwRenderStateType, DWORD dwRenderState);
+	virtual HRESULT GetRenderState(D3DRENDERSTATETYPE dwRenderStateType, LPDWORD lpdwRenderState);
+	virtual HRESULT SetTextureStageState(DWORD dwStage, D3DTEXTURESTAGESTATETYPE dwState, DWORD dwValue);
+	virtual HRESULT SetTexture(DWORD dwStage, LPDIRECT3DTEXTURE2 lpTexture);
+	virtual HRESULT SetRenderTarget(LPDIRECTDRAWSURFACE lpNewRenderTarget, DWORD dwFlags);
+	virtual HRESULT DrawPrimitive(
+		D3DPRIMITIVETYPE dptPrimitiveType,
+		DWORD dwVertexTypeDesc,
+		LPVOID lpvVertices,
+		DWORD dwVertexCount,
+		DWORD dwFlags
+	);
+	virtual HRESULT DrawIndexedPrimitive(
+		D3DPRIMITIVETYPE dptPrimitiveType,
+		DWORD dwVertexTypeDesc,
+		LPVOID lpvVertices,
+		DWORD dwVertexCount,
+		LPWORD lpwIndices,
+		DWORD dwIndexCount,
+		DWORD dwFlags
+	);
+};
+
+struct IDirect3D3 : virtual public IUnknown {
+	virtual HRESULT EnumDevices(LPD3DENUMDEVICESCALLBACK lpEnumDevicesCallback, LPVOID lpUserArg);
+	virtual HRESULT EnumZBufferFormats(REFCLSID riidDevice, LPD3DENUMPIXELFORMATSCALLBACK lpEnumCallback, LPVOID lpContext);
+	virtual HRESULT CreateDevice(
+		REFCLSID rclsid,
+		LPDIRECTDRAWSURFACE lpDDS,
+		LPDIRECT3DDEVICE3* lplpD3DDevice,
+		IUnknown* pUnkOuter
+	);
+	virtual HRESULT CreateViewport(LPDIRECT3DVIEWPORT3* lplpD3DViewport, IUnknown* pUnkOuter);
+	virtual HRESULT CreateMaterial(LPDIRECT3DMATERIAL3* lplpDirect3DMaterial, IUnknown* pUnkOuter);
+};
