@@ -157,21 +157,9 @@ uint32_t Fourcc(const char* p_tag)
 					   ((uint8_t) p_tag[3] << 24));
 }
 
-// The user's install may carry re-encoded top-level AVIs alongside the original
-// Indeo 5 ones (commonly under orig/); pick whichever actually is Indeo 5.
 bool OpenIndeo5Avi(AviReader& p_reader, const char* p_filename)
 {
-	if (p_reader.Open(p_filename) && p_reader.GetVideoCodec() == Fourcc("IV50")) {
-		return true;
-	}
-
-	char alternate[512];
-	SDL_snprintf(alternate, sizeof(alternate), "orig/%s", p_filename);
-	if (p_reader.Open(alternate) && p_reader.GetVideoCodec() == Fourcc("IV50")) {
-		return true;
-	}
-
-	return false;
+	return p_reader.Open(p_filename) && p_reader.GetVideoCodec() == Fourcc("IV50");
 }
 
 } // namespace

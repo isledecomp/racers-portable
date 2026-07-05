@@ -25,7 +25,7 @@ Place the built `LEGORacers` executable next to the game's data files (`LEGO.JAM
 - `--resolution native|original` — render 3D at the display resolution (default) or at the game's original 640x480, upscaled.
 - `--language <index>` — seeds the language selection the original stored in the registry.
 
-Alt+Enter toggles fullscreen. The intro movies play from the original Indeo 5 AVIs; installs whose top-level AVIs were re-encoded fall back to `orig/<name>.avi` automatically.
+Alt+Enter toggles fullscreen. The intro movies play from the original Indeo 5 AVIs.
 
 ## Library substitutions
 
