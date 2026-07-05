@@ -136,6 +136,11 @@ private:
 	int m_vpH = 0;
 	int m_borderClearFrames = 0;
 
+	// One-frame-in-flight throttle: waiting on the previous frame's fence before
+	// swapping keeps the compositor queue shallow; macOS GL otherwise punishes
+	// backpressure with occasional ~500 ms flush stalls.
+	GLsync m_frameFence = nullptr;
+
 	// Offscreen target for MINIWIN_RESOLUTION_ORIGINAL: the scene rasterizes at the
 	// logical resolution and is scaled up at present time.
 	GLuint m_sceneFbo = 0;
@@ -862,10 +867,19 @@ void MiniwinGl3Backend::Present()
 		);
 	}
 
+	if (m_frameFence) {
+		MiniwinSlowOpLog slowLog("FrameFence", "");
+		gl.glClientWaitSync(m_frameFence, GL_SYNC_FLUSH_COMMANDS_BIT, 100000000ull);
+		gl.glDeleteSync(m_frameFence);
+		m_frameFence = nullptr;
+	}
+
 	{
 		MiniwinSlowOpLog slowLog("SwapWindow", "");
 		SDL_GL_SwapWindow(m_window);
 	}
+
+	m_frameFence = gl.glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
 
 	gl.glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
 }
