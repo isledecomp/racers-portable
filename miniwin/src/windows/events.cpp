@@ -18,6 +18,63 @@ static SDL_Mutex* g_queueMutex;
 static std::vector<QueuedEvent> g_queue;
 static size_t g_queueHead;
 
+SDL_AtomicInt g_miniwinHeartbeat;
+SDL_AtomicInt g_miniwinPhase;
+
+// RACERS_WATCHDOG=<ms>: report game-thread stalls longer than the threshold along
+// with the miniwin phase the thread is stuck in.
+static int SDLCALL WatchdogThread(void* p_threshold)
+{
+	Uint64 thresholdMs = (Uint64) (uintptr_t) p_threshold;
+	int lastBeat = -1;
+	Uint64 lastChangeMs = SDL_GetTicks();
+	bool reported = false;
+
+	for (;;) {
+		SDL_Delay(25);
+
+		int beat = SDL_GetAtomicInt(&g_miniwinHeartbeat);
+		Uint64 nowMs = SDL_GetTicks();
+		if (beat != lastBeat) {
+			if (reported) {
+				SDL_Log("[watchdog] game thread resumed after %llu ms", (unsigned long long) (nowMs - lastChangeMs));
+			}
+			lastBeat = beat;
+			lastChangeMs = nowMs;
+			reported = false;
+		}
+		else if (!reported && nowMs - lastChangeMs > thresholdMs) {
+			reported = true;
+			SDL_Log(
+				"[watchdog] game thread stalled %llu ms (phase %d) at t=%llu",
+				(unsigned long long) (nowMs - lastChangeMs),
+				SDL_GetAtomicInt(&g_miniwinPhase),
+				(unsigned long long) nowMs
+			);
+		}
+	}
+
+	return 0;
+}
+
+static void EnsureWatchdog()
+{
+	static bool started;
+	if (started) {
+		return;
+	}
+	started = true;
+
+	const char* spec = getenv("RACERS_WATCHDOG");
+	if (spec && spec[0]) {
+		int thresholdMs = SDL_atoi(spec);
+		if (thresholdMs <= 0) {
+			thresholdMs = 250;
+		}
+		SDL_DetachThread(SDL_CreateThread(WatchdogThread, "MiniwinWatchdog", (void*) (uintptr_t) thresholdMs));
+	}
+}
+
 static void EnsureQueue()
 {
 	if (!g_queueMutex) {
@@ -43,6 +100,9 @@ void MiniwinApp_PushEvent(const SDL_Event& p_event)
 
 bool MiniwinApp_PollEvent(SDL_Event& p_event)
 {
+	EnsureWatchdog();
+	SDL_AddAtomicInt(&g_miniwinHeartbeat, 1);
+
 	EnsureQueue();
 	SDL_LockMutex(g_queueMutex);
 

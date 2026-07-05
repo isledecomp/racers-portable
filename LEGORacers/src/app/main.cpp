@@ -164,8 +164,9 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	return SDL_APP_CONTINUE;
 }
 
-// Synthetic input for automated testing: RACERS_AUTOKEY="ms:scancode,ms:scancode,..."
-// injects a key press (down + up) of the given SDL scancode at each timestamp.
+// Synthetic input for automated testing: RACERS_AUTOKEY="ms:scancode[:holdMs],..."
+// injects a key press of the given SDL scancode at each timestamp; the release
+// follows holdMs later (default 80).
 static void PumpAutoKeys()
 {
 	static const char* spec = getenv("RACERS_AUTOKEY");
@@ -198,15 +199,33 @@ static void PumpAutoKeys()
 			*colon = '\0';
 
 			Uint64 at = (Uint64) SDL_atoi(entry);
+			Uint64 hold = 80;
+			char* holdSep = SDL_strchr(colon + 1, ':');
+			if (holdSep) {
+				*holdSep = '\0';
+				hold = (Uint64) SDL_atoi(holdSep + 1);
+			}
+
 			SDL_Scancode scancode = (SDL_Scancode) SDL_atoi(colon + 1);
 			keys[keyCount].m_atMs = at;
 			keys[keyCount].m_scancode = scancode;
 			keys[keyCount].m_up = false;
 			keyCount++;
-			keys[keyCount].m_atMs = at + 80;
+			keys[keyCount].m_atMs = at + hold;
 			keys[keyCount].m_scancode = scancode;
 			keys[keyCount].m_up = true;
 			keyCount++;
+		}
+
+		// Overlapping holds queue their releases out of order; the drain below needs
+		// ascending timestamps.
+		for (int i = 1; i < keyCount; i++) {
+			AutoKey pending = keys[i];
+			int j = i - 1;
+			for (; j >= 0 && keys[j].m_atMs > pending.m_atMs; j--) {
+				keys[j + 1] = keys[j];
+			}
+			keys[j + 1] = pending;
 		}
 	}
 

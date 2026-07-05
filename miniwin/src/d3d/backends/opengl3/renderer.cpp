@@ -285,8 +285,18 @@ Uint32 MiniwinGl3Backend::CreateTexture(int p_width, int p_height, const void* p
 	return id;
 }
 
+Uint32 g_miniwinStatTexUploads;
+Uint64 g_miniwinStatTexUploadBytes;
+
 void MiniwinGl3Backend::UpdateTexture(Uint32 p_id, int p_width, int p_height, const void* p_rgba, bool p_mipmaps)
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_TEXTURE_UPLOAD);
+	g_miniwinStatTexUploads++;
+	g_miniwinStatTexUploadBytes += (Uint64) p_width * p_height * 4;
+	char detail[64];
+	SDL_snprintf(detail, sizeof(detail), "tex %u %dx%d", (unsigned) p_id, p_width, p_height);
+	MiniwinSlowOpLog slowLog("UpdateTexture", detail);
+
 	static const char* dumpDir = getenv("RACERS_DUMP_TEX");
 	if (dumpDir && p_id <= 64) {
 		SDL_Surface* surface =
@@ -608,6 +618,28 @@ void MiniwinGl3Backend::EndScene()
 
 void MiniwinGl3Backend::HandleFrameDump()
 {
+	// Periodic screenshots for automated testing: RACERS_DUMP_EVERY="ms:prefix"
+	// writes prefix-<seconds>.bmp every ms milliseconds.
+	static const char* periodicSpec = getenv("RACERS_DUMP_EVERY");
+	if (periodicSpec && periodicSpec[0]) {
+		const char* colon = SDL_strchr(periodicSpec, ':');
+		if (colon) {
+			static Uint64 lastDumpMs;
+			Uint64 intervalMs = (Uint64) SDL_atoi(periodicSpec);
+			Uint64 nowMs = SDL_GetTicks();
+			if (intervalMs && nowMs - lastDumpMs >= intervalMs) {
+				lastDumpMs = nowMs;
+				char path[512];
+				SDL_snprintf(path, sizeof(path), "%s-%03llu.bmp", colon + 1, (unsigned long long) (nowMs / 1000));
+				SDL_Surface* shot = ReadBackbuffer();
+				if (shot) {
+					SDL_SaveBMP(shot, path);
+					SDL_DestroySurface(shot);
+				}
+			}
+		}
+	}
+
 	static const char* dumpSpec = getenv("RACERS_DUMP_FRAME");
 	if (!dumpSpec || !dumpSpec[0]) {
 		return;
@@ -642,19 +674,47 @@ void MiniwinGl3Backend::HandleFrameDump()
 
 void MiniwinGl3Backend::Present()
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_PRESENT);
 	m_frameCounter++;
 
 	static const char* statsEnv = getenv("RACERS_GL_STATS");
+	if (statsEnv) {
+		static Uint64 lastNs, minNs, maxNs, sumNs;
+		Uint64 nowNs = SDL_GetTicksNS();
+		if (lastNs) {
+			Uint64 deltaNs = nowNs - lastNs;
+			sumNs += deltaNs;
+			if (!minNs || deltaNs < minNs) {
+				minNs = deltaNs;
+			}
+			if (deltaNs > maxNs) {
+				maxNs = deltaNs;
+			}
+		}
+		lastNs = nowNs;
+		if ((m_frameCounter % 100) == 0) {
+			SDL_LogInfo(
+				LOG_CATEGORY_MINIWIN,
+				"frame time min/avg/max = %.1f/%.1f/%.1f ms",
+				minNs / 1e6,
+				sumNs / 100 / 1e6,
+				maxNs / 1e6
+			);
+			minNs = maxNs = sumNs = 0;
+		}
+	}
 	if (statsEnv && (m_frameCounter % 100) == 0) {
 		SDL_LogInfo(
 			LOG_CATEGORY_MINIWIN,
-			"frame %llu: %u draws, %u vertices, %u clears, %u setRS, %u setTex",
+			"frame %llu: %u draws, %u vertices, %u clears, %u setRS, %u setTex, %u uploads (%llu KiB)",
 			(unsigned long long) m_frameCounter,
 			m_statDraws,
 			m_statVertices,
 			m_statClears,
 			g_miniwinStatSetRenderState,
-			g_miniwinStatSetTexture
+			g_miniwinStatSetTexture,
+			g_miniwinStatTexUploads,
+			(unsigned long long) (g_miniwinStatTexUploadBytes / 1024)
 		);
 		m_statLoggedSample = false;
 	}
@@ -663,9 +723,15 @@ void MiniwinGl3Backend::Present()
 	m_statClears = 0;
 	g_miniwinStatSetRenderState = 0;
 	g_miniwinStatSetTexture = 0;
+	g_miniwinStatTexUploads = 0;
+	g_miniwinStatTexUploadBytes = 0;
 
 	HandleFrameDump();
-	SDL_GL_SwapWindow(m_window);
+
+	{
+		MiniwinSlowOpLog slowLog("SwapWindow", "");
+		SDL_GL_SwapWindow(m_window);
+	}
 }
 
 SDL_Surface* MiniwinGl3Backend::ReadBackbuffer()

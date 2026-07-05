@@ -227,6 +227,9 @@ HRESULT DirectSoundCreate(LPCGUID pcGuidDevice, LPDIRECTSOUND* ppDS, IUnknown* p
 
 HRESULT IDirectSound::CreateSoundBuffer(LPCDSBUFFERDESC, LPDIRECTSOUNDBUFFER*, IUnknown*)
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_AUDIO);
+	MiniwinSlowOpLog slowLog("dsound", "CreateSoundBuffer");
+
 	return DSERR_GENERIC;
 }
 HRESULT IDirectSound::GetCaps(LPDSCAPS)
@@ -373,6 +376,9 @@ HRESULT IDirectSoundBuffer::Lock(
 
 HRESULT IDirectSoundBuffer::Play(DWORD dwReserved1, DWORD dwPriority, DWORD dwFlags)
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_AUDIO);
+	MiniwinSlowOpLog slowLog("dsound", "Play");
+
 	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
 	self->m_looping = (dwFlags & DSBPLAY_LOOPING) != 0;
 
@@ -454,6 +460,9 @@ HRESULT IDirectSoundBuffer::SetFrequency(DWORD dwFrequency)
 
 HRESULT IDirectSoundBuffer::Stop()
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_AUDIO);
+	MiniwinSlowOpLog slowLog("dsound", "Stop");
+
 	MiniwinSoundBuffer* self = static_cast<MiniwinSoundBuffer*>(this);
 	if (self->m_soundReady) {
 		ma_sound_stop(&self->m_sound);

@@ -128,6 +128,9 @@ HANDLE CreateFile(
 	HANDLE hTemplateFile
 )
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_FILE_IO);
+	MiniwinSlowOpLog slowLog("CreateFile", lpFileName);
+
 	char resolved[1024];
 	MiniwinResolvePath(lpFileName, resolved, sizeof(resolved));
 
@@ -153,6 +156,9 @@ BOOL ReadFile(HANDLE hFile, LPVOID lpBuffer, DWORD nNumberOfBytesToRead, LPDWORD
 	if (!handle || handle == INVALID_HANDLE_VALUE || handle->type != MiniwinHandleType::File) {
 		return FALSE;
 	}
+
+	MiniwinPhaseScope phase(MINIWIN_PHASE_FILE_IO);
+	MiniwinSlowOpLog slowLog("ReadFile", "");
 
 	size_t read = SDL_ReadIO(static_cast<MiniwinFileHandle*>(handle)->stream, lpBuffer, nNumberOfBytesToRead);
 	if (lpNumberOfBytesRead) {
@@ -244,6 +250,9 @@ extern "C" {
 
 int _open(const char* path, int oflag, int pmode)
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_FILE_IO);
+	MiniwinSlowOpLog slowLog("_open", path);
+
 	char resolved[1024];
 	MiniwinResolvePath(path, resolved, sizeof(resolved));
 	int fd = open(resolved, oflag, (mode_t) pmode);
@@ -263,6 +272,9 @@ int _close(int fd)
 
 int _read(int fd, void* buffer, unsigned int count)
 {
+	MiniwinPhaseScope phase(MINIWIN_PHASE_FILE_IO);
+	MiniwinSlowOpLog slowLog("_read", "");
+
 	int result = (int) read(fd, buffer, count);
 
 	static const char* fsLog = getenv("RACERS_FS_LOG");
