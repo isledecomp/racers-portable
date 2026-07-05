@@ -29,6 +29,48 @@ jobs:
         run: |
           git diff --exit-code
 
+  ncc:
+    name: Naming conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM and Clang
+        uses: KyleMayes/install-llvm-action@v2
+        with:
+          version: '21'
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install python libraries
+        run: |
+          pip install clang==21.* pyyaml
+
+      - name: Run ncc
+        run: |
+          python3 tools/ncc/ncc.py \
+            --clang-lib ${{ env.LLVM_PATH }}/lib/libclang.so \
+            --recurse \
+            --style tools/ncc/ncc.style \
+            --skip tools/ncc/skip.yml \
+            --definition DEFINE_GUID PASCAL WINAPI FAR BOOL CALLBACK HWND__=HWND SDLCALL \
+            --include \
+              util \
+              LEGORacers/include \
+              LEGORacers \
+              GolDP/include \
+              GolDP \
+              common/include \
+              common \
+            --exclude \
+              LEGORacers/src/app/main.cpp \
+              LEGORacers/src/video/avireader.cpp \
+              LEGORacers/src/video/videoplayer.cpp \
+              LEGORacers/include/video/avireader.h \
+            --path LEGORacers GolDP common
+
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}

@@ -235,7 +235,7 @@ void Win32GolApp::InitializeDisplayWithDevice(
 }
 
 // Applies the current windowed/fullscreen state to the SDL window.
-void Win32GolApp_ApplyWindowMode(HWND p_hWnd, LegoBool32 p_fullscreen, LegoU32 p_width, LegoU32 p_height)
+static void ApplyWindowMode(HWND p_hWnd, LegoBool32 p_fullscreen, LegoU32 p_width, LegoU32 p_height)
 {
 	SDL_Window* window = AppWindow(p_hWnd);
 	if (!window) {
@@ -286,12 +286,12 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 
 	if (!(m_flags & c_flagFullscreen)) {
 		m_windowMode = c_windowModeWindowed;
-		Win32GolApp_ApplyWindowMode(m_hWnd, FALSE, p_width, p_height);
+		ApplyWindowMode(m_hWnd, FALSE, p_width, p_height);
 	}
 	else {
 		m_windowMode = c_windowModeFullscreen;
 		GetInputManager()->GetMouse()->SetNonExclusiveMode();
-		Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, p_width, p_height);
+		ApplyWindowMode(m_hWnd, TRUE, p_width, p_height);
 	}
 
 	m_windowStateChanging = FALSE;
@@ -538,12 +538,12 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 			m_flags |= c_flagFullscreen;
 			m_windowMode = c_windowModeFullscreen;
 			GetInputManager()->GetMouse()->SetNonExclusiveMode();
-			Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
+			ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
 		}
 		else {
 			m_flags &= ~c_flagFullscreen;
 			m_windowMode = c_windowModeWindowed;
-			Win32GolApp_ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
+			ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
 		}
 
 		if (m_eventHandler) {
@@ -556,7 +556,7 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 		LegoU32 fullscreenFlags = drawFlags | (GolDrawState::c_flagHardwareDevice | GolDrawState::c_flagBit10);
 		m_windowMode = c_windowModeFullscreen;
 		GetInputManager()->GetMouse()->SetNonExclusiveMode();
-		Win32GolApp_ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
+		ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
 
 		m_golDrawState->CreateDisplay(m_width, m_height, m_bpp, fullscreenFlags);
 

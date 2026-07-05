@@ -153,6 +153,15 @@ if (RACERS_BUILD_APP)
     "${PROJECT_SOURCE_DIR}/GolDP/include"
   )
   target_link_libraries(legoracers PRIVATE goldp miniwin indeo5 SDL3::SDL3)
+
+  # The decomp headers use MSVC-isms (calling conventions, #pragma warning) that
+  # compat.h neutralizes; not every header includes it, so inject it up front for
+  # the decomp code. Scoped to these targets: C libraries must not see its C++
+  # macros.
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(legoracers PRIVATE -include "${CMAKE_SOURCE_DIR}/util/compat.h")
+    target_compile_options(goldp PRIVATE -include "${CMAKE_SOURCE_DIR}/util/compat.h")
+  endif()
   if (WIN32)
     target_sources(legoracers PRIVATE LEGORacers/racers.rc)
     set_property(SOURCE LEGORacers/racers.rc APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/LEGORacers/resources/racers.ico")
