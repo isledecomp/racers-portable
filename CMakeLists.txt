@@ -152,7 +152,7 @@ if (RACERS_BUILD_APP)
     "${PROJECT_SOURCE_DIR}/util"
     "${PROJECT_SOURCE_DIR}/GolDP/include"
   )
-  target_link_libraries(legoracers PRIVATE goldp miniwin SDL3::SDL3)
+  target_link_libraries(legoracers PRIVATE goldp miniwin indeo5 SDL3::SDL3)
   if (WIN32)
     target_sources(legoracers PRIVATE LEGORacers/racers.rc)
     set_property(SOURCE LEGORacers/racers.rc APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/LEGORacers/resources/racers.ico")
