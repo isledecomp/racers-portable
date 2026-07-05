@@ -162,6 +162,25 @@ bool OpenIndeo5Avi(AviReader& p_reader, const char* p_filename)
 	return p_reader.Open(p_filename) && p_reader.GetVideoCodec() == Fourcc("IV50");
 }
 
+// Modifier keys (Alt/Ctrl/Shift/GUI) should not skip a movie on their own — Alt is
+// the first half of the Alt+Enter fullscreen chord.
+bool IsModifierKey(SDL_Keycode p_key)
+{
+	switch (p_key) {
+	case SDLK_LALT:
+	case SDLK_RALT:
+	case SDLK_LCTRL:
+	case SDLK_RCTRL:
+	case SDLK_LSHIFT:
+	case SDLK_RSHIFT:
+	case SDLK_LGUI:
+	case SDLK_RGUI:
+		return true;
+	default:
+		return false;
+	}
+}
+
 } // namespace
 
 extern CommandLineArgs g_commandLineArgs;
@@ -417,7 +436,21 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 				aborted = true;
 			}
 			else if (
-				p_abortableOnKey && (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+				event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)
+			) {
+				// Alt+Enter toggles fullscreen, mirroring the game's message pump. The
+				// game's own toggle is unavailable here (its display does not exist
+				// until the movies finish), so drive the window directly; the frame
+				// loop reads the drawable size every frame, so the letterbox follows.
+				SDL_Window* window = g_video->m_window;
+				MiniwinApp_RunOnMainThread([window]() {
+					bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+					SDL_SetWindowFullscreen(window, !fullscreen);
+				});
+			}
+			else if (
+				p_abortableOnKey && ((event.type == SDL_EVENT_KEY_DOWN && !IsModifierKey(event.key.key)) ||
+									 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
 			) {
 				aborted = true;
 			}
