@@ -5,6 +5,8 @@
 #include "golmath.h"
 #include "types.h"
 
+#include <stdint.h>
+
 class GolOrientedEntity;
 class GolWorldEntity;
 class Racer;
@@ -76,15 +78,18 @@ public:
 		undefined4 m_flags;        // 0x04
 		LegoU32 m_maxFireCount;    // 0x08
 		undefined4 m_hitThreshold; // 0x0c
+		// 64-bit compatibility: the counters share their slots with pointers, so they
+		// are pointer-sized — a 32-bit write would leave half of the overlaid pointer
+		// uninitialized.
 		union {
-			LegoU32 m_intervalMs;          // 0x10
+			uintptr_t m_intervalMs;        // 0x10
 			void* m_data;                  // 0x10
 			GolWorldEntity* m_worldEntity; // 0x10
 			RigidBody* m_target;           // 0x10
 		};
 		union {
-			LegoU32 m_elapsedMs; // 0x14
-			Event* m_previous;   // 0x14
+			uintptr_t m_elapsedMs; // 0x14
+			Event* m_previous;     // 0x14
 		};
 	};
 
@@ -95,13 +100,14 @@ public:
 		undefined4 m_flags;  // 0x04
 		LegoU32 m_fireCount; // 0x08
 		LegoU32 m_hitCount;  // 0x0c
+		// 64-bit compatibility: pointer-sized counters, as in Descriptor.
 		union {
-			LegoU32 m_intervalMs;             // 0x10
+			uintptr_t m_intervalMs;           // 0x10
 			GolWorldEntity* m_worldEntity0;   // 0x10
 			Descriptor::RigidBody* m_target0; // 0x10
 		};
 		union {
-			LegoU32 m_elapsedMs;              // 0x14
+			uintptr_t m_elapsedMs;            // 0x14
 			void* m_data;                     // 0x14
 			GolWorldEntity* m_worldEntity1;   // 0x14
 			Descriptor::RigidBody* m_target1; // 0x14
