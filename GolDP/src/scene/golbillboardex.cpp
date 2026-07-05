@@ -27,6 +27,14 @@ extern const LegoFloat g_billboardTexCoordMax = 1.0f;
 GolBillboardInitializerFunction g_billboardTexCoordInit = &GolBillboard::InitializeTexCoords;
 #pragma data_seg()
 
+#ifdef COMPAT_MODE
+// [library:3d] Only the MSVC CRT walks .CRT$XCU and calls the registered pointer; on
+// other toolchains it is never invoked, leaving the shared billboard texture
+// coordinates zeroed (every billboard would sample a single texel). Run it as an
+// ordinary static initializer instead.
+static const bool g_billboardTexCoordInitRan = (GolBillboard::InitializeTexCoords(), true);
+#endif
+
 // FUNCTION: GOLDP 0x10014e20
 void GolBillboard::InitializeTexCoords()
 {
