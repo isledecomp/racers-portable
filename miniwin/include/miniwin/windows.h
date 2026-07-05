@@ -280,7 +280,9 @@ struct WNDCLASSA {
 typedef WNDCLASSA WNDCLASS;
 typedef WNDCLASSA* LPWNDCLASSA;
 
-struct MSG {
+// Named like the real Win32 tag: SDL3's SDL_system.h forward-declares
+// `typedef struct tagMSG MSG;` on Windows for its message-hook API.
+struct tagMSG {
 	HWND hwnd;
 	UINT message;
 	WPARAM wParam;
@@ -288,6 +290,7 @@ struct MSG {
 	DWORD time;
 	POINT pt;
 };
+typedef tagMSG MSG;
 typedef MSG* LPMSG;
 
 // --- Macros ---

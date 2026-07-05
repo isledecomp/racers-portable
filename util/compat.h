@@ -9,6 +9,14 @@
 #define COMPAT_MODE
 #endif
 
+// Calling-convention keywords: MSVC and clang accept them on every target (clang
+// ignores them off-x86); plain GCC only knows them on Windows targets.
+#if defined(__GNUC__) && !defined(__clang__) && !defined(_WIN32)
+#define __fastcall
+#define __stdcall
+#define __cdecl
+#endif
+
 // Disable "identifier was truncated to '255' characters" warning.
 // Impossible to avoid this if using STL map or set.
 // This removes most (but not all) occurrences of the warning.
