@@ -476,10 +476,13 @@ DWORD GetWindowThreadProcessId(HWND hWnd, LPDWORD lpdwProcessId)
 	return 1;
 }
 
+#ifndef _WIN32
+// The Windows CRT provides stricmp; this shim is for POSIX systems.
 int stricmp(const char* string1, const char* string2)
 {
 	return SDL_strcasecmp(string1, string2);
 }
+#endif
 
 // --- COM stubs ---
 

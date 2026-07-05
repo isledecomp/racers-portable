@@ -30,6 +30,9 @@ static SDL_Window* AppWindow(HWND p_hWnd)
 	return reinterpret_cast<SDL_Window*>(p_hWnd);
 }
 
+// Alt+Enter handling swallows the Enter release that follows the toggle.
+static bool g_suppressReturnUp;
+
 // FUNCTION: LEGORACERS 0x004164d0
 Win32GolApp::Win32GolApp()
 {
@@ -383,18 +386,17 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 	// thread) are dispatched to the same GolAppEventHandler notifications the Win32
 	// window procedure produced.
 	SDL_Event event;
-	static bool suppressReturnUp;
 	do {
 		while (MiniwinApp_PollEvent(event)) {
 			// Alt+Enter toggles fullscreen and must not leak into the game's input
 			// layer (Enter doubles as the menu click).
 			if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)) {
 				ToggleFullscreen();
-				suppressReturnUp = true;
+				g_suppressReturnUp = true;
 				continue;
 			}
-			if (suppressReturnUp && event.type == SDL_EVENT_KEY_UP && event.key.key == SDLK_RETURN) {
-				suppressReturnUp = false;
+			if (g_suppressReturnUp && event.type == SDL_EVENT_KEY_UP && event.key.key == SDLK_RETURN) {
+				g_suppressReturnUp = false;
 				continue;
 			}
 
