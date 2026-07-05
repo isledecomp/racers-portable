@@ -11,7 +11,7 @@ Please note: this project is primarily dedicated to achieving platform independe
 | Windows (x64) | [![CI](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml/badge.svg)](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml) |
 | macOS (arm64) | [![CI](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml/badge.svg)](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml) |
 | Linux (x64) | [![CI](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml/badge.svg)](https://github.com/isledecomp/racers-portable/actions/workflows/ci.yml) |
-| Web | planned (deferred) |
+| Web | Work-in-progress |
 
 We are actively working to support more platforms. If you have experience with a particular platform, we encourage you to contribute to `racers-portable`.
 
