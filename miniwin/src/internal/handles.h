@@ -41,8 +41,3 @@ struct MiniwinFileHandle : MiniwinHandle {
 
 	SDL_IOStream* stream;
 };
-
-// Resolves a game-supplied path (possibly with '\\' separators and wrong case) to an
-// on-disk path. Returns true and fills p_resolved on success; on failure p_resolved holds
-// the normalized-but-unresolved path (usable for creation). Implemented in files.cpp.
-bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedSize);
