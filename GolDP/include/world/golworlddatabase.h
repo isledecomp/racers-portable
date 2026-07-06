@@ -36,7 +36,7 @@ struct Rect;
 
 // VTABLE: GOLDP 0x100576ec
 // SIZE 0xf0
-class GOLDP_EXPORT GolWorldDatabase {
+class GOLDP_UNIX_EXPORT GolWorldDatabase {
 	friend class DriverHeadBuilder;
 
 public:

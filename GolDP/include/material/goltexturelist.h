@@ -34,7 +34,7 @@ public:
 
 // VTABLE: GOLDP 0x100575ac
 // SIZE 0x20
-class GOLDP_EXPORT GolTextureList : public GolNameTable {
+class GOLDP_UNIX_EXPORT GolTextureList : public GolNameTable {
 public:
 	// VTABLE: GOLDP 0x100575d8
 	// SIZE 0x1fc

@@ -136,8 +136,8 @@ target_include_directories(goldp PRIVATE
   "${PROJECT_SOURCE_DIR}/common/include"
   "${PROJECT_SOURCE_DIR}/util"
 )
-generate_export_header(goldp BASE_NAME GOLDP EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/goldp_export.h")
-target_include_directories(goldp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+generate_export_header(goldp BASE_NAME GOLDP EXPORT_MACRO_NAME GOLDP_EXPORT_INNER EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/goldp_export_inner.h")
+target_include_directories(goldp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/GolDP")
 set_property(TARGET goldp PROPERTY C_VISIBILITY_PRESET hidden)
 set_property(TARGET goldp PROPERTY CXX_VISIBILITY_PRESET hidden)
 target_link_libraries(goldp PRIVATE miniwin SDL3::SDL3)
