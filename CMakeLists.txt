@@ -219,7 +219,7 @@ if (CLANG_LIBRARY AND TARGET Python3::Interpreter)
       --recurse
       --style tools/ncc/ncc.style
       --skip tools/ncc/skip.yml
-      --definition DEFINE_GUID PASCAL WINAPI FAR BOOL CALLBACK HWND__=HWND SDLCALL GOLDP_EXPORT GOLDP_UNIX_EXPORT
+      --definition DEFINE_GUID PASCAL WINAPI FAR BOOL CALLBACK HWND__=HWND SDLCALL GOLDP_EXPORT_INNER=
       --include
         util
         LEGORacers/include
