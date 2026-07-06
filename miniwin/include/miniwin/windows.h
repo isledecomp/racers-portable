@@ -571,6 +571,13 @@ DWORD SetFilePointer(HANDLE hFile, LONG lDistanceToMove, LPLONG lpDistanceToMove
 DWORD GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh);
 DWORD GetFileAttributes(LPCSTR lpFileName);
 
+// Resolves a game-supplied path (possibly with '\\' separators and wrong case, like
+// "hvscmp.avi" for HVSCmp.avi) to an on-disk path. The Win32 file shims above call this
+// automatically; game code that opens files with the native CRT instead (e.g. AviReader's
+// fopen) must call it first to work on case-sensitive filesystems. Returns true and fills
+// p_resolved on success; on failure p_resolved holds the normalized-but-unresolved path.
+bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedSize);
+
 // --- Functions: registry ---
 LSTATUS RegOpenKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult);
 LSTATUS RegOpenKeyEx(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);

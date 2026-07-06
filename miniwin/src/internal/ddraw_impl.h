@@ -5,6 +5,7 @@
 #include <SDL3/SDL.h>
 #include <miniwin/d3d.h>
 #include <miniwin/ddraw.h>
+#include <miniwin/miniwinapp.h>
 
 class MiniwinRenderBackend;
 
@@ -104,6 +105,9 @@ struct MiniwinDirectDraw : public IDirectDraw {
 	DWORD m_modeHeight = 0;
 	DWORD m_modeBpp = 0;
 	MiniwinRenderBackend* m_backend = nullptr;
+	// The render backend this DirectDraw was created for (from the driver GUID); a
+	// mismatch with the running backend at CreateDevice time triggers a relaunch.
+	MiniwinBackendId m_requestedBackend = MINIWIN_BACKEND_SDLGPU;
 };
 
 // Fills a DDPIXELFORMAT for a plain RGB mode of the given depth (565 for 16 bpp,

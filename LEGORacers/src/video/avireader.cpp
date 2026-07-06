@@ -1,5 +1,6 @@
 #include "video/avireader.h"
 
+#include <miniwin/windows.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -55,7 +56,11 @@ bool AviReader::Open(const char* p_path)
 {
 	Close();
 
-	m_file = fopen(p_path, "rb");
+	// The game hard-codes movie names in lowercase ("hvscmp.avi"), but the data ships
+	// mixed case (HVSCmp.avi); resolve here so opening works on case-sensitive filesystems.
+	char resolved[1024];
+	MiniwinResolvePath(p_path, resolved, sizeof(resolved));
+	m_file = fopen(resolved, "rb");
 	if (!m_file) {
 		return false;
 	}

@@ -50,6 +50,45 @@ void MiniwinSetRenderResolution(MiniwinRenderResolution p_resolution);
 void MiniwinSound_SetSuspended(bool p_suspended);
 MiniwinRenderResolution MiniwinGetRenderResolution();
 
+// Render backend selection. The backend rasterizes the game's Direct3D output. SDL_GPU
+// is the default; OpenGL 3.3 is the fallback (used on --renderer opengl3, or when
+// SDL_GPU is unavailable). The value is read before the window is created.
+enum MiniwinBackendId {
+	MINIWIN_BACKEND_SDLGPU = 0,
+	MINIWIN_BACKEND_OPENGL3 = 1,
+};
+void MiniwinSetBackend(MiniwinBackendId p_backend);
+MiniwinBackendId MiniwinGetBackend();
+
+// Maps a --renderer name to an id ("sdlgpu"/"gpu"; "opengl3"/"opengl"/"gl"). Returns
+// false on an unknown name (the caller warns and keeps the default).
+bool MiniwinBackendFromName(const char* p_name, MiniwinBackendId* p_id);
+const char* MiniwinBackendName(MiniwinBackendId p_backend);
+
+// Loads the persisted in-game renderer choice (written when switched via the menu).
+// Read at startup, before the window is created, when --renderer is not given.
+bool MiniwinBackendLoadPref(MiniwinBackendId* p_id);
+
+// Records the process command line so the in-game renderer switch can relaunch with a
+// different --renderer. Call once at startup.
+void MiniwinApp_SetCommandLine(int p_argc, char** p_argv);
+
 // Configures SDL window attributes required by the render backend; returns extra
 // SDL_WindowFlags to OR into SDL_CreateWindow. Main thread, before window creation.
+// Resolves the active backend (falling back if the requested one is unavailable), so
+// the window is created with flags matching the backend that will actually be used.
 Uint32 MiniwinBackend_PrepareWindowFlags();
+
+// Presents one decoded video frame (tightly packed RGBA8, p_width x p_height) through
+// the active render backend, letterboxed into the window — so intro/cutscene playback
+// uses the selected renderer like the rest of the game. Game thread (VideoPlayer).
+void MiniwinBackend_PresentVideoFrame(SDL_Window* p_window, const void* p_rgba, int p_width, int p_height);
+
+// Fullscreen carried from an Alt+Enter during video playback into the game's first
+// display init. The video player records its toggle; Win32GolApp::InitializeDisplay
+// consumes it once (returning false when none was recorded, e.g. -novideo).
+void MiniwinApp_SetVideoFullscreenChoice(bool p_fullscreen);
+bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen);
+
+// Destroys the shared render backend. Call at application shutdown.
+void MiniwinBackend_Shutdown();

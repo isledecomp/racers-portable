@@ -100,6 +100,7 @@ static void DisplayArgumentHelp()
 	SDL_Log("  --language <index>   language index (seeds the emulated registry LangID)");
 	SDL_Log("  --scale <mode>       fullscreen scaling: letterbox (default) or stretch");
 	SDL_Log("  --resolution <mode>  render at native (default) or original (640x480) resolution");
+	SDL_Log("  --renderer <name>    render backend: sdlgpu (default) or opengl3");
 	SDL_Log("  --help               show this help");
 	SDL_Log("Original game options (passed through):");
 	SDL_Log("  -novideo -window -primary -select3d -alphatrans -horzres <n> -vertres <n>");
@@ -117,8 +118,12 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		return SDL_APP_FAILURE;
 	}
 
+	// Saved so the in-game renderer switch can relaunch with a different --renderer.
+	MiniwinApp_SetCommandLine(argc, argv);
+
 	// Portable arguments are consumed here; everything else is passed through to
 	// LegoRacers::ParseArguments untouched.
+	bool rendererFromCli = false;
 	g_commandLine[0] = '\0';
 	for (int i = 1; i < argc; i++) {
 		if (SDL_strcmp(argv[i], "--help") == 0) {
@@ -150,6 +155,21 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			i++;
 			continue;
 		}
+		if (SDL_strcmp(argv[i], "--renderer") == 0 && i + 1 < argc) {
+			MiniwinBackendId backend;
+			if (!MiniwinBackendFromName(argv[i + 1], &backend)) {
+				SDL_LogError(
+					SDL_LOG_CATEGORY_APPLICATION,
+					"--renderer: unknown renderer '%s' (use sdlgpu or opengl3)",
+					argv[i + 1]
+				);
+				return SDL_APP_FAILURE;
+			}
+			MiniwinSetBackend(backend);
+			rendererFromCli = true;
+			i++;
+			continue;
+		}
 		if (SDL_strcmp(argv[i], "--path") == 0 && i + 1 < argc) {
 #ifdef _WIN32
 			_chdir(argv[i + 1]);
@@ -166,6 +186,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			SDL_strlcat(g_commandLine, " ", sizeof(g_commandLine));
 		}
 		SDL_strlcat(g_commandLine, argv[i], sizeof(g_commandLine));
+	}
+
+	// With no explicit --renderer, honor the renderer chosen in a previous session's
+	// in-game menu (persisted on switch), read before the window is created.
+	if (!rendererFromCli) {
+		MiniwinBackendId saved;
+		if (MiniwinBackendLoadPref(&saved)) {
+			MiniwinSetBackend(saved);
+		}
 	}
 
 	CoInitialize(0);
@@ -345,5 +374,6 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 		g_gameThread = nullptr;
 	}
 
+	MiniwinBackend_Shutdown();
 	CoUninitialize();
 }

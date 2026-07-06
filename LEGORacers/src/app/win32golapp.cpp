@@ -270,9 +270,22 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 	m_height = p_height;
 	m_bpp = p_bpp;
 	m_flags = p_flags;
+
+	// A fullscreen toggle during the intro movies happened before this display existed;
+	// adopt it so the menu keeps the mode the user chose.
+	bool videoFullscreen;
+	if (MiniwinApp_ConsumeVideoFullscreenChoice(&videoFullscreen)) {
+		if (videoFullscreen) {
+			m_flags |= c_flagFullscreen;
+		}
+		else {
+			m_flags &= ~c_flagFullscreen;
+		}
+	}
+
 	m_windowStateChanging = TRUE;
 
-	LegoU32 drawFlags = BuildDrawStateFlags(p_flags);
+	LegoU32 drawFlags = BuildDrawStateFlags(m_flags);
 	LegoS32 result = m_golDrawState->RecreateDisplay(p_width, p_height, p_bpp, drawFlags);
 	if (result) {
 		return result;
@@ -282,10 +295,10 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 	Win32GolApp::m_renderer = commonState->m_currentRenderer;
 	m_unk0x808 = m_golDrawState->m_displaySurface ? 1 : 0;
 
-	if (m_golDrawState->m_flags & GolDrawState::c_flagHardwareDevice) {
-		m_flags |= c_flagFullscreen;
-	}
-
+	// The original forced fullscreen for hardware devices here (m_flags |= c_flagFullscreen);
+	// the portable renderers all report as hardware, which would ignore -window. The
+	// fullscreen intent already lives in p_flags (set by default, cleared by -window), so
+	// honor it directly and let windowed hardware rendering work.
 	if (!(m_flags & c_flagFullscreen)) {
 		m_windowMode = c_windowModeWindowed;
 		ApplyWindowMode(m_hWnd, FALSE, p_width, p_height);
@@ -547,18 +560,12 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 			drawFlags & ~(GolDrawState::c_flagHardwareDevice | GolDrawState::c_flagBit10)
 		);
 
-		if (m_golDrawState->m_flags & GolDrawState::c_flagHardwareDevice) {
-			OutputDebugString("--from full screen\n");
-			m_flags |= c_flagFullscreen;
-			m_windowMode = c_windowModeFullscreen;
-			GetInputManager()->GetMouse()->SetNonExclusiveMode();
-			ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
-		}
-		else {
-			m_flags &= ~c_flagFullscreen;
-			m_windowMode = c_windowModeWindowed;
-			ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
-		}
+		// The original stays full screen here when the device can only be created as a
+		// hardware (full-screen) device; the portable backends always render to a window,
+		// so honor the windowed request directly.
+		m_flags &= ~c_flagFullscreen;
+		m_windowMode = c_windowModeWindowed;
+		ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
 
 		if (m_eventHandler) {
 			m_eventHandler->OnWindowModeChanged();

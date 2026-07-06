@@ -1,5 +1,6 @@
 // [library:3d] OpenGL 3.3 core render backend.
 
+#include "backends.h"
 #include "gl3loader.h"
 #include "miniwin.h"
 #include "renderbackend.h"
@@ -155,7 +156,12 @@ private:
 	bool m_statLoggedSample = false;
 };
 
-Uint32 MiniwinBackend_PrepareWindowFlags()
+bool MiniwinGl3_Available()
+{
+	return true;
+}
+
+Uint32 MiniwinGl3_PrepareWindowFlags()
 {
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
@@ -165,7 +171,7 @@ Uint32 MiniwinBackend_PrepareWindowFlags()
 	return SDL_WINDOW_OPENGL;
 }
 
-MiniwinRenderBackend* MiniwinBackend_Create(SDL_Window* p_window, int p_width, int p_height)
+MiniwinRenderBackend* MiniwinGl3_Create(SDL_Window* p_window, int p_width, int p_height)
 {
 	MiniwinGl3Backend* backend = new MiniwinGl3Backend();
 	backend->m_width = p_width;
