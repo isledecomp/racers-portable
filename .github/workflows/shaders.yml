@@ -1,0 +1,102 @@
+name: SDL_GPU shaders
+
+# Regenerates the committed SDL_GPU shader bytecode header. macOS/desktop developers can
+# produce SPIR-V + MSL locally, but not DXIL (Direct3D 12) — there is no macOS DXC
+# prebuilt. This Linux job builds a DXC-enabled SDL_shadercross (using the prebuilt Linux
+# DXC), runs the generator, and commits the header back with the DXIL blobs filled in.
+#
+# It only triggers on shader-source / generator changes, so committing the generated
+# header does not re-trigger it; the normal build CI then verifies the header compiles.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'miniwin/src/d3d/backends/sdlgpu/shaders/src/**'
+      - 'miniwin/src/d3d/backends/sdlgpu/shaders/gen_shaders.py'
+      - '.github/workflows/shaders.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build build-essential glslang-tools python3
+
+      # Builds + caches SDL3 and installs its Linux dependencies. Mirrors how SDL_shadercross
+      # builds itself in CI, which sidesteps hand-maintaining SDL3's X11/Wayland dep list.
+      - name: Set up SDL
+        uses: libsdl-org/setup-sdl@main
+        with:
+          cmake-generator: Ninja
+          version: 3-head
+          install-linux-dependencies: true
+
+      - name: Build SPIRV-Cross and fetch DXC
+        run: |
+          git clone --depth 1 https://github.com/libsdl-org/SDL_shadercross "$RUNNER_TEMP/shadercross"
+          cd "$RUNNER_TEMP/shadercross"
+          git submodule update --init --depth 1 external/SPIRV-Cross
+
+          # shadercross links SPIRV-Cross's C API; build + install the pinned submodule so its
+          # find_package(spirv_cross_c_shared) resolves against a matching version.
+          cmake -S external/SPIRV-Cross -B spirv_cross_build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSPIRV_CROSS_SHARED=ON -DSPIRV_CROSS_STATIC=ON \
+            -DSPIRV_CROSS_CLI=OFF -DSPIRV_CROSS_ENABLE_TESTS=OFF \
+            -DCMAKE_INSTALL_PREFIX="$PWD/spirv_cross_prefix"
+          cmake --build spirv_cross_build
+          cmake --install spirv_cross_build
+          echo "spirv_cross_c_shared_ROOT=$PWD/spirv_cross_prefix" >> "$GITHUB_ENV"
+
+          # Prebuilt Linux DXC (avoids compiling DirectXShaderCompiler from source); extracts
+          # to external/DirectXShaderCompiler-binaries/linux.
+          cmake -P build-scripts/download-prebuilt-DirectXShaderCompiler.cmake
+          echo "DirectXShaderCompiler_ROOT=$PWD/external/DirectXShaderCompiler-binaries" >> "$GITHUB_ENV"
+
+      - name: Build DXC-enabled SDL_shadercross
+        run: |
+          cd "$RUNNER_TEMP/shadercross"
+          # VENDORED=OFF uses the SDL3 / SPIRV-Cross / DXC we provide above (via *_ROOT).
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DSDLSHADERCROSS_VENDORED=OFF \
+            -DSDLSHADERCROSS_CLI=ON \
+            -DSDLSHADERCROSS_TESTS=OFF \
+            -DSDLSHADERCROSS_SHARED=ON -DSDLSHADERCROSS_STATIC=OFF \
+            -DSDLSHADERCROSS_INSTALL=OFF
+          cmake --build build
+
+      - name: Regenerate shader header (with DXIL)
+        run: |
+          sdl_lib="$(dirname "$(find "$HOME" "$RUNNER_TEMP" /usr/local -name 'libSDL3.so*' 2>/dev/null | head -1)")"
+          export LD_LIBRARY_PATH="$spirv_cross_c_shared_ROOT/lib:$DirectXShaderCompiler_ROOT/linux/lib:$sdl_lib:${LD_LIBRARY_PATH:-}"
+          cd miniwin/src/d3d/backends/sdlgpu/shaders
+          python3 gen_shaders.py src generated/miniwin_sdlgpu_shaders.h \
+            glslangValidator "$RUNNER_TEMP/shadercross/build/shadercross"
+          # gen_shaders.py tolerates a DXC-less shadercross by emitting an empty DXIL blob;
+          # in this job that means the toolchain silently failed, so reject it.
+          if grep -q "dxil_len = 0;" generated/miniwin_sdlgpu_shaders.h; then
+            echo "::error::DXIL was not generated — shadercross could not produce D3D12 bytecode"
+            exit 1
+          fi
+
+      - name: Commit regenerated header
+        run: |
+          header=miniwin/src/d3d/backends/sdlgpu/shaders/generated/miniwin_sdlgpu_shaders.h
+          if git diff --quiet -- "$header"; then
+            echo "Shader header already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$header"
+          git commit -m "Regenerate SDL_GPU shaders with DXIL"
+          git push
