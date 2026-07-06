@@ -209,3 +209,32 @@ if (EXISTS "${CLANGFORMAT_BIN}")
     endif()
   endif()
 endif()
+
+find_library(CLANG_LIBRARY NAMES "clang" DOC "libclang from host (NOT target) system")
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if (CLANG_LIBRARY AND TARGET Python3::Interpreter)
+  add_custom_target(ncc
+    Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/ncc/ncc.py"
+      --clang-lib "${CLANG_LIBRARY}"
+      --recurse
+      --style tools/ncc/ncc.style
+      --skip tools/ncc/skip.yml
+      --definition DEFINE_GUID PASCAL WINAPI FAR BOOL CALLBACK HWND__=HWND SDLCALL GOLDP_EXPORT GOLDP_UNIX_EXPORT
+      --include
+        util
+        LEGORacers/include
+        LEGORacers
+        GolDP/include
+        GolDP
+        common/include
+        common
+      --exclude
+        LEGORacers/src/app/main.cpp
+        LEGORacers/src/video/avireader.cpp
+        LEGORacers/src/video/videoplayer.cpp
+        LEGORacers/include/video/avireader.h
+      --path LEGORacers GolDP common
+    COMMENT "Verifying naming conventions (ncc)"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+  )
+endif()
