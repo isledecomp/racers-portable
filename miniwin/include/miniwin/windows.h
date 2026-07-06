@@ -578,6 +578,12 @@ DWORD GetFileAttributes(LPCSTR lpFileName);
 // p_resolved on success; on failure p_resolved holds the normalized-but-unresolved path.
 bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedSize);
 
+// Fills p_out with the absolute, user-writable data directory (SDL_GetPrefPath, ending
+// with the platform separator). Everything the game writes — saved games and the
+// renderer preference — lives under it, because the working / game-data directory may be
+// read-only (e.g. Program Files on Windows). p_out is left empty on failure.
+void MiniwinGetUserDataPath(char* p_out, size_t p_size);
+
 // --- Functions: registry ---
 LSTATUS RegOpenKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult);
 LSTATUS RegOpenKeyEx(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);

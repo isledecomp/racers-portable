@@ -68,12 +68,15 @@ MiniwinBackendId MiniwinGetBackend();
 bool MiniwinBackendFromName(const char* p_name, MiniwinBackendId* p_id);
 const char* MiniwinBackendName(MiniwinBackendId p_backend);
 
-// Loads the persisted in-game renderer choice (written when switched via the menu).
-// Read at startup, before the window is created, when --renderer is not given.
+// The persisted renderer choice: the single source of truth for which backend boots.
+// Written by an explicit --renderer (so a CLI choice sticks) and by an in-game switch;
+// read at startup, before the window is created, when --renderer is not given.
 bool MiniwinBackendLoadPref(MiniwinBackendId* p_id);
+void MiniwinBackendSavePref(MiniwinBackendId p_backend);
 
-// Records the process command line so the in-game renderer switch can relaunch with a
-// different --renderer. Call once at startup.
+// Records the process command line so the in-game renderer switch can relaunch the
+// process, replaying it without --renderer (the new backend comes from the saved
+// preference). Call once at startup.
 void MiniwinApp_SetCommandLine(int p_argc, char** p_argv);
 
 // Configures SDL window attributes required by the render backend; returns extra
@@ -81,6 +84,12 @@ void MiniwinApp_SetCommandLine(int p_argc, char** p_argv);
 // Resolves the active backend (falling back if the requested one is unavailable), so
 // the window is created with flags matching the backend that will actually be used.
 Uint32 MiniwinBackend_PrepareWindowFlags();
+
+// Marks the resolved backend unusable and re-resolves to the next candidate. Call when
+// SDL_CreateWindow failed for the flags PrepareWindowFlags returned (e.g. an OpenGL ES
+// pref on a desktop with no ES driver); returns true if a *different* usable backend is
+// now active so the caller can reset the GL attributes and retry, false if none remain.
+bool MiniwinBackend_DemoteActiveBackend();
 
 // Presents one decoded video frame (tightly packed RGBA8, p_width x p_height) through
 // the active render backend, letterboxed into the window — so intro/cutscene playback

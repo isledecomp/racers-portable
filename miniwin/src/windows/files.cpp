@@ -123,6 +123,26 @@ bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedS
 #endif
 }
 
+void MiniwinGetUserDataPath(char* p_out, size_t p_size)
+{
+	if (!p_out || p_size == 0) {
+		return;
+	}
+
+	// SDL_GetPrefPath creates the directory and is comparatively costly, so cache it. The
+	// returned path already ends with the platform path separator.
+	static char s_base[1024];
+	if (!s_base[0]) {
+		char* pref = SDL_GetPrefPath("isledecomp", "racers");
+		if (pref) {
+			SDL_strlcpy(s_base, pref, sizeof(s_base));
+			SDL_free(pref);
+		}
+	}
+
+	SDL_strlcpy(p_out, s_base, p_size);
+}
+
 // --- Win32 file API (used by the music streaming code) ---
 
 HANDLE CreateFile(

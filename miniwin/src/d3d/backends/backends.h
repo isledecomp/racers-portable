@@ -24,8 +24,7 @@ MiniwinBackendId MiniwinBackendActive();
 // Fills p_out with the compiled, usable backends (active first); returns the count.
 int MiniwinBackend_EnumDrivers(MiniwinBackendId* p_out, int p_max);
 
-// Persists / re-launches for the in-game renderer switch.
-void MiniwinBackendSavePref(MiniwinBackendId p_backend);
+// Re-launches the process for the in-game renderer switch (SavePref is in miniwinapp.h).
 void MiniwinBackend_Relaunch(MiniwinBackendId p_backend);
 
 #ifdef USE_OPENGL3

@@ -117,11 +117,13 @@ HRESULT MiniwinDirect3D::CreateDevice(
 		return DDERR_INVALIDPARAMS;
 	}
 
-	// CreateDevice runs only for real rendering (never during enumeration). If the game
-	// selected a different backend (in-game Options -> Video, or a saved preference that
-	// differs from the running process), the window's graphics binding is already fixed,
-	// so switch renderers by relaunching the process. The active backend is enumerated
-	// first, so the default device match never trips this.
+	// CreateDevice runs only for real rendering (never during enumeration). Switching the
+	// render backend needs a fresh process (the window's graphics binding is fixed at
+	// creation), so an in-game Options -> Video selection is applied by saving it as the
+	// preference and relaunching (the new process reads the preference; no --renderer is
+	// forced). The startup restore of the game's saved display device is neutralized in
+	// MenuManager::ApplySettings, so the only request that differs from the running backend
+	// here is a genuine in-game switch.
 	MiniwinBackendId requested = m_ddraw->m_requestedBackend;
 	if (requested != MiniwinBackendActive() && MiniwinBackendUsable(requested)) {
 		MiniwinBackendSavePref(requested);

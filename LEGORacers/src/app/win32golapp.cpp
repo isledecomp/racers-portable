@@ -80,8 +80,18 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 		SDL_strlcpy(title, titleOverride, sizeof(title));
 	}
 	MiniwinApp_RunOnMainThread([&window, &title]() {
-		Uint32 backendFlags = MiniwinBackend_PrepareWindowFlags();
-		window = SDL_CreateWindow(title, 640, 480, SDL_WINDOW_HIDDEN | backendFlags);
+		// Create the window with the resolved backend's GL/GPU attributes. If that backend
+		// cannot produce a window on this system (e.g. a saved OpenGL ES renderer choice on
+		// a desktop with no ES driver), demote it and retry with the next usable backend so
+		// a persisted renderer preference can never leave the game unable to open a window.
+		for (;;) {
+			SDL_GL_ResetAttributes();
+			Uint32 backendFlags = MiniwinBackend_PrepareWindowFlags();
+			window = SDL_CreateWindow(title, 640, 480, SDL_WINDOW_HIDDEN | backendFlags);
+			if (window || !MiniwinBackend_DemoteActiveBackend()) {
+				break;
+			}
+		}
 		if (window) {
 			// The original hid the Win32 cursor over the client area (WM_SETCURSOR
 			// with a NULL class cursor); the game draws its own pointer.

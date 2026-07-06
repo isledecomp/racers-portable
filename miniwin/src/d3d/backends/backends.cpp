@@ -36,6 +36,10 @@ static MiniwinBackendId g_activeBackend = MINIWIN_BACKEND_OPENGLES3;
 static bool g_resolved;
 static MiniwinBackendId g_resolvedBackend;
 
+// Set per backend when its window/context could not be created this session, so the
+// fallback chain treats it as unavailable from then on.
+static bool g_backendForcedUnusable[3];
+
 void MiniwinSetBackend(MiniwinBackendId p_backend)
 {
 	g_activeBackend = p_backend;
@@ -143,6 +147,9 @@ static bool BackendUsable(MiniwinBackendId p_backend)
 	if (index < 0 || index >= 3) {
 		return false;
 	}
+	if (g_backendForcedUnusable[index]) {
+		return false;
+	}
 	if (s_cache[index] < 0) {
 		s_cache[index] = BackendProbe(p_backend) ? 1 : 0;
 	}
@@ -189,6 +196,31 @@ static MiniwinBackendId ResolveBackend()
 	return resolved;
 }
 
+bool MiniwinBackend_DemoteActiveBackend()
+{
+	MiniwinBackendId failed = ResolveBackend();
+	g_backendForcedUnusable[(int) failed] = true;
+	g_resolved = false;
+
+	MiniwinBackendId next = ResolveBackend();
+	if (next == failed) {
+		SDL_LogError(
+			LOG_CATEGORY_MINIWIN,
+			"render backend '%s' could not create a window and no fallback is available",
+			MiniwinBackendName(failed)
+		);
+		return false;
+	}
+
+	SDL_LogWarn(
+		LOG_CATEGORY_MINIWIN,
+		"render backend '%s' could not create a window; falling back to '%s'",
+		MiniwinBackendName(failed),
+		MiniwinBackendName(next)
+	);
+	return true;
+}
+
 // --- Dispatch ---
 
 Uint32 MiniwinBackend_PrepareWindowFlags()
@@ -212,12 +244,17 @@ Uint32 MiniwinBackend_PrepareWindowFlags()
 }
 
 static MiniwinRenderBackend* g_backend;
+// The window the backend is bound to (for life). Kept so the renderer-switch relaunch can
+// read the live fullscreen/windowed state.
+static SDL_Window* g_backendWindow;
 
 MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, int p_height)
 {
 	if (g_backend || !p_window) {
 		return g_backend;
 	}
+
+	g_backendWindow = p_window;
 
 	switch (ResolveBackend()) {
 #ifdef USE_SDL_GPU
@@ -384,12 +421,12 @@ int MiniwinBackend_EnumDrivers(MiniwinBackendId* p_out, int p_max)
 
 static bool BackendPrefPath(char* p_path, size_t p_size)
 {
-	char* base = SDL_GetPrefPath("isledecomp", "racers");
-	if (!base) {
+	char base[1024];
+	MiniwinGetUserDataPath(base, sizeof(base));
+	if (!base[0]) {
 		return false;
 	}
 	SDL_snprintf(p_path, p_size, "%srenderer", base);
-	SDL_free(base);
 	return true;
 }
 
@@ -466,8 +503,23 @@ void MiniwinBackend_Relaunch(MiniwinBackendId p_backend)
 		return;
 	}
 
-	// Rebuild argv: the original minus any --renderer <value>, plus the new selection.
-	// Force -novideo so the intro movies do not replay on every renderer switch.
+	// Carry the CURRENT window state across the relaunch: an in-game Alt+Enter or
+	// fullscreen toggle since launch must be preserved, not reverted to the original
+	// -window argument. Query the live window (main thread) and re-derive -window below.
+	bool windowed = false;
+	if (g_backendWindow) {
+		SDL_Window* window = g_backendWindow;
+		MiniwinApp_RunOnMainThread([window, &windowed]() {
+			windowed = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) == 0;
+		});
+	}
+
+	// Rebuild argv: the original minus any --renderer <value> and -window. The new backend
+	// is NOT forced on the command line -- it was just written as the saved preference, and
+	// the relaunched process (no --renderer) reads that preference. This keeps the pref the
+	// single source of truth and lets a later plain launch follow the same choice. Force
+	// -novideo so the intro movies do not replay on every switch, and re-add -window only
+	// if the window is currently windowed.
 	std::vector<char*> args;
 	args.push_back(exe);
 	bool hasNoVideo = false;
@@ -475,6 +527,9 @@ void MiniwinBackend_Relaunch(MiniwinBackendId p_backend)
 		if (SDL_strcmp(g_argv[i], "--renderer") == 0) {
 			i++; // also skip its value
 			continue;
+		}
+		if (SDL_strcmp(g_argv[i], "-window") == 0) {
+			continue; // re-derived from the current window state below
 		}
 		if (SDL_strcmp(g_argv[i], "-novideo") == 0) {
 			hasNoVideo = true;
@@ -484,11 +539,16 @@ void MiniwinBackend_Relaunch(MiniwinBackendId p_backend)
 	if (!hasNoVideo) {
 		args.push_back((char*) "-novideo");
 	}
-	args.push_back((char*) "--renderer");
-	args.push_back((char*) MiniwinBackendName(p_backend));
+	if (windowed) {
+		args.push_back((char*) "-window");
+	}
 	args.push_back(nullptr);
 
-	SDL_LogInfo(LOG_CATEGORY_MINIWIN, "relaunching with renderer '%s'", MiniwinBackendName(p_backend));
+	SDL_LogInfo(
+		LOG_CATEGORY_MINIWIN,
+		"relaunching for renderer '%s' (saved preference)",
+		MiniwinBackendName(p_backend)
+	);
 
 	// Replace the process image on the main thread; execv tears down everything, so the
 	// game's already-persisted state is what carries over.

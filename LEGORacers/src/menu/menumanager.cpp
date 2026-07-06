@@ -1109,6 +1109,13 @@ void MenuManager::ApplySettings()
 		currentDisplayDriverGuid.m_guid = *currentGuid;
 	}
 
+	// [library:3d] Portable: the render backend is chosen at boot from --renderer or the
+	// saved preference (miniwin), and an in-game switch relaunches through that preference.
+	// The game's persisted display device is therefore not authoritative for the running
+	// backend; force it to match so this startup restore never recreates the display or
+	// relaunches the process. Only OptionsScreen::ApplyVideoDriver performs a real switch.
+	savedDisplayDriverGuid = currentDisplayDriverGuid;
+
 	if (::memcmp(&savedDisplayDriverGuid, &currentDisplayDriverGuid, sizeof(GUID)) != 0) {
 		do {
 			drawState->GetDriverGuid(driverIndex, &driverGuid.m_guid);

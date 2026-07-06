@@ -4,6 +4,7 @@
 #include "golfile.h"
 #include "golstream.h"
 
+#include <miniwin/windows.h>
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(SaveSystem, 0x1f4c)
@@ -36,20 +37,13 @@ void SaveSystem::Reset()
 // FUNCTION: LEGORACERS 0x004432e0
 void SaveSystem::Initialize(InputManager* p_inputManager, LegoBool32 p_createIfMissing)
 {
-	char path[128];
+	char path[512];
 
 	m_gameState.Initialize(p_inputManager);
-	if (g_searchPaths[0] != NULL) {
-		::strcpy(path, g_searchPaths[0]);
-		size_t len = strlen(path);
-		if ((LegoS32) len > 0 && path[len - 1] != '\\') {
-			path[len] = '\\';
-			path[len + 1] = '\0';
-		}
-	}
-	else {
-		path[0] = '\0';
-	}
+	// [library:filesystem] Root the save tree in the user-writable pref directory rather
+	// than the game-data / working directory, which may be read-only (e.g. Program Files
+	// on Windows). The absolute path flows through _mkdir/_chdir/_open on every platform.
+	MiniwinGetUserDataPath(path, sizeof(path));
 
 	::strcat(path, "Save\\");
 	m_directory.Initialize(path);

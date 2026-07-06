@@ -103,7 +103,7 @@ static void DisplayArgumentHelp()
 	SDL_Log("  --renderer <name>    render backend: sdlgpu (default), opengl3, or opengles3");
 	SDL_Log("  --help               show this help");
 	SDL_Log("Original game options (passed through):");
-	SDL_Log("  -novideo -window -primary -select3d -alphatrans -horzres <n> -vertres <n>");
+	SDL_Log("  -novideo -window -horzres <n> -vertres <n>");
 }
 
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
@@ -165,7 +165,10 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 				);
 				return SDL_APP_FAILURE;
 			}
+			// An explicit --renderer is authoritative and sticks: persist it as the saved
+			// preference so a later plain launch (and the in-game menu) follow this choice.
 			MiniwinSetBackend(backend);
+			MiniwinBackendSavePref(backend);
 			rendererFromCli = true;
 			i++;
 			continue;
