@@ -282,10 +282,10 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 	Win32GolApp::m_renderer = commonState->m_currentRenderer;
 	m_unk0x808 = m_golDrawState->m_displaySurface ? 1 : 0;
 
-	if (m_golDrawState->m_flags & GolDrawState::c_flagHardwareDevice) {
-		m_flags |= c_flagFullscreen;
-	}
-
+	// The original forced fullscreen for hardware devices here (m_flags |= c_flagFullscreen);
+	// the portable renderers all report as hardware, which would ignore -window. The
+	// fullscreen intent already lives in p_flags (set by default, cleared by -window), so
+	// honor it directly and let windowed hardware rendering work.
 	if (!(m_flags & c_flagFullscreen)) {
 		m_windowMode = c_windowModeWindowed;
 		ApplyWindowMode(m_hWnd, FALSE, p_width, p_height);
