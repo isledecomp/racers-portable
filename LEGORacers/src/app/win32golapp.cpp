@@ -547,18 +547,12 @@ void Win32GolApp::ChangeWindowState(LegoU32 p_mode)
 			drawFlags & ~(GolDrawState::c_flagHardwareDevice | GolDrawState::c_flagBit10)
 		);
 
-		if (m_golDrawState->m_flags & GolDrawState::c_flagHardwareDevice) {
-			OutputDebugString("--from full screen\n");
-			m_flags |= c_flagFullscreen;
-			m_windowMode = c_windowModeFullscreen;
-			GetInputManager()->GetMouse()->SetNonExclusiveMode();
-			ApplyWindowMode(m_hWnd, TRUE, m_width, m_height);
-		}
-		else {
-			m_flags &= ~c_flagFullscreen;
-			m_windowMode = c_windowModeWindowed;
-			ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
-		}
+		// The original stays full screen here when the device can only be created as a
+		// hardware (full-screen) device; the portable backends always render to a window,
+		// so honor the windowed request directly.
+		m_flags &= ~c_flagFullscreen;
+		m_windowMode = c_windowModeWindowed;
+		ApplyWindowMode(m_hWnd, FALSE, m_width, m_height);
 
 		if (m_eventHandler) {
 			m_eventHandler->OnWindowModeChanged();
