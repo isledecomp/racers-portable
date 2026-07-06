@@ -73,11 +73,17 @@ public:
 extern Uint32 g_miniwinStatSetRenderState;
 extern Uint32 g_miniwinStatSetTexture;
 
-// Configures SDL window attributes required by the selected backend; returns extra
-// SDL_WindowFlags to OR into SDL_CreateWindow. Must run on the main thread before the
-// window exists.
-Uint32 MiniwinBackend_PrepareWindowFlags();
+// Returns the process-shared render backend for the window, creating it on first use
+// (on the game thread; the GL context / GPU device is created and bound there). The
+// same instance is shared by the DirectDraw present path and video playback, so the
+// window is claimed by exactly one backend. p_width/p_height are the logical render
+// size and only take effect on creation. Returns nullptr if the backend fails to
+// initialize. Owned by the backend layer; released by MiniwinBackend_Shutdown().
+MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, int p_height);
 
-// Creates the configured backend for a window (called on the game thread; the GL
-// context is created and bound there).
-MiniwinRenderBackend* MiniwinBackend_Create(SDL_Window* p_window, int p_width, int p_height);
+// MiniwinBackend_PrepareWindowFlags / _PresentVideoFrame / _Shutdown and the backend
+// selection config are declared in <miniwin/miniwinapp.h>.
+
+// Backend-agnostic screenshot hook (RACERS_DUMP_EVERY / RACERS_DUMP_FRAME): reads the
+// backbuffer and writes a BMP. Call once per Present with the backend's frame counter.
+void MiniwinBackend_HandleFrameDump(MiniwinRenderBackend* p_backend, Uint64 p_frameCounter);

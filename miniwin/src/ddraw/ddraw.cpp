@@ -1,5 +1,6 @@
 // [library:2d] DirectDraw object + creation entry points.
 
+#include "backends.h"
 #include "ddraw_impl.h"
 #include "miniwin.h"
 #include "renderbackend.h"
@@ -45,9 +46,18 @@ void MiniwinFillRgbPixelFormat(DDPIXELFORMAT* p_format, DWORD p_bpp)
 
 HRESULT DirectDrawEnumerate(LPDDENUMCALLBACKA lpCallback, LPVOID lpContext)
 {
-	char description[] = "Primary Display Driver (miniwin)";
-	char name[] = "display";
-	lpCallback(nullptr, description, name, lpContext);
+	// One display driver per compiled, usable render backend, so the in-game Options ->
+	// Video carousel can switch renderers (active backend enumerated first).
+	MiniwinBackendId drivers[4];
+	int count = MiniwinBackend_EnumDrivers(drivers, 4);
+	for (int i = 0; i < count; i++) {
+		GUID guid = *MiniwinBackendGuid(drivers[i]);
+		char name[32];
+		SDL_strlcpy(name, MiniwinBackendDisplayName(drivers[i]), sizeof(name));
+		if (!lpCallback(&guid, name, name, lpContext)) {
+			break;
+		}
+	}
 	return DD_OK;
 }
 
@@ -57,7 +67,11 @@ HRESULT DirectDrawCreate(GUID* lpGUID, LPDIRECTDRAW* lplpDD, IUnknown* pUnkOuter
 		return DDERR_INVALIDPARAMS;
 	}
 
-	*lplpDD = new MiniwinDirectDraw();
+	MiniwinDirectDraw* ddraw = new MiniwinDirectDraw();
+	MiniwinBackendId requested;
+	ddraw->m_requestedBackend = MiniwinBackendFromGuid(lpGUID, &requested) ? requested : MiniwinBackendActive();
+
+	*lplpDD = ddraw;
 	return DD_OK;
 }
 
@@ -244,7 +258,7 @@ HRESULT MiniwinDirectDraw::GetDisplayMode(LPDDSURFACEDESC lpDDSurfaceDesc)
 MiniwinRenderBackend* MiniwinDirectDraw::GetBackend()
 {
 	if (!m_backend && m_hwnd) {
-		m_backend = MiniwinBackend_Create(
+		m_backend = MiniwinBackend_Acquire(
 			reinterpret_cast<SDL_Window*>(m_hwnd),
 			m_modeWidth ? (int) m_modeWidth : 640,
 			m_modeHeight ? (int) m_modeHeight : 480

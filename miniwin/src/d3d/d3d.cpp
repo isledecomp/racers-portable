@@ -2,6 +2,7 @@
 // factories. One hardware-accelerated RGB device is advertised, backed by the miniwin
 // render backends.
 
+#include "backends.h"
 #include "ddraw_impl.h"
 #include "miniwin.h"
 
@@ -114,6 +115,17 @@ HRESULT MiniwinDirect3D::CreateDevice(
 {
 	if (!lplpD3DDevice) {
 		return DDERR_INVALIDPARAMS;
+	}
+
+	// CreateDevice runs only for real rendering (never during enumeration). If the game
+	// selected a different backend (in-game Options -> Video, or a saved preference that
+	// differs from the running process), the window's graphics binding is already fixed,
+	// so switch renderers by relaunching the process. The active backend is enumerated
+	// first, so the default device match never trips this.
+	MiniwinBackendId requested = m_ddraw->m_requestedBackend;
+	if (requested != MiniwinBackendActive() && MiniwinBackendUsable(requested)) {
+		MiniwinBackendSavePref(requested);
+		MiniwinBackend_Relaunch(requested);
 	}
 
 	*lplpD3DDevice = MiniwinCreateDevice(static_cast<MiniwinSurface*>(lpDDS));
