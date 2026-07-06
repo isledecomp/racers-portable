@@ -15,6 +15,7 @@ class GolViewFrustum;
 class GolWorldEntity {
 public:
 	GolWorldEntity();
+	virtual ~GolWorldEntity() = default;
 
 	// SIZE 0x08
 	struct ViewResult {

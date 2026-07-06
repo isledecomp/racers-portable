@@ -1231,7 +1231,9 @@ void GolImgFile::SetImageInfo(
 	m_width = p_width;
 	m_height = p_height;
 	m_rowByteStride = p_rowByteStride;
-	m_paletteSize = 1 << m_format.m_bitsPerPixel;
+	if (m_format.m_bitsPerPixel < 16) {
+		m_paletteSize = 1 << m_format.m_bitsPerPixel;
+	}
 	m_keepNibbleOrder = 0;
 	m_remapPureBlack = 0;
 
