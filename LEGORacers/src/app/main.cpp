@@ -157,16 +157,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		}
 		if (SDL_strcmp(argv[i], "--renderer") == 0 && i + 1 < argc) {
 			MiniwinBackendId backend;
-			if (MiniwinBackendFromName(argv[i + 1], &backend)) {
-				MiniwinSetBackend(backend);
-			}
-			else {
-				SDL_LogWarn(
+			if (!MiniwinBackendFromName(argv[i + 1], &backend)) {
+				SDL_LogError(
 					SDL_LOG_CATEGORY_APPLICATION,
 					"--renderer: unknown renderer '%s' (use sdlgpu or opengl3)",
 					argv[i + 1]
 				);
+				return SDL_APP_FAILURE;
 			}
+			MiniwinSetBackend(backend);
 			rendererFromCli = true;
 			i++;
 			continue;
