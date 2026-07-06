@@ -84,5 +84,11 @@ Uint32 MiniwinBackend_PrepareWindowFlags();
 // uses the selected renderer like the rest of the game. Game thread (VideoPlayer).
 void MiniwinBackend_PresentVideoFrame(SDL_Window* p_window, const void* p_rgba, int p_width, int p_height);
 
+// Fullscreen carried from an Alt+Enter during video playback into the game's first
+// display init. The video player records its toggle; Win32GolApp::InitializeDisplay
+// consumes it once (returning false when none was recorded, e.g. -novideo).
+void MiniwinApp_SetVideoFullscreenChoice(bool p_fullscreen);
+bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen);
+
 // Destroys the shared render backend. Call at application shutdown.
 void MiniwinBackend_Shutdown();

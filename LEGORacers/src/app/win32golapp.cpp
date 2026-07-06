@@ -270,9 +270,22 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 	m_height = p_height;
 	m_bpp = p_bpp;
 	m_flags = p_flags;
+
+	// A fullscreen toggle during the intro movies happened before this display existed;
+	// adopt it so the menu keeps the mode the user chose.
+	bool videoFullscreen;
+	if (MiniwinApp_ConsumeVideoFullscreenChoice(&videoFullscreen)) {
+		if (videoFullscreen) {
+			m_flags |= c_flagFullscreen;
+		}
+		else {
+			m_flags &= ~c_flagFullscreen;
+		}
+	}
+
 	m_windowStateChanging = TRUE;
 
-	LegoU32 drawFlags = BuildDrawStateFlags(p_flags);
+	LegoU32 drawFlags = BuildDrawStateFlags(m_flags);
 	LegoS32 result = m_golDrawState->RecreateDisplay(p_width, p_height, p_bpp, drawFlags);
 	if (result) {
 		return result;

@@ -239,12 +239,14 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 			) {
 				// Alt+Enter toggles fullscreen, mirroring the game's message pump. The
 				// game's own toggle is unavailable here (its display does not exist until
-				// the movies finish), so drive the window directly; the backend reads the
-				// drawable size every present, so the letterbox follows.
+				// the movies finish), so drive the window directly and hand the resulting
+				// mode to the game's first display init; the backend reads the drawable
+				// size every present, so the letterbox follows.
 				SDL_Window* window = g_video->m_window;
 				MiniwinApp_RunOnMainThread([window]() {
 					bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
 					SDL_SetWindowFullscreen(window, !fullscreen);
+					MiniwinApp_SetVideoFullscreenChoice(!fullscreen);
 				});
 			}
 			else if (

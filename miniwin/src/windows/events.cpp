@@ -42,6 +42,27 @@ MiniwinRenderResolution MiniwinGetRenderResolution()
 	return g_renderResolution;
 }
 
+// The video player toggles fullscreen directly on the window (the game's display does not
+// exist yet during the movies), so this one-shot carries the choice into the game's first
+// display init — otherwise the main menu snaps back to the launch mode. 0 = no choice
+// (the zero-initialized default), 1 = windowed, 2 = fullscreen.
+static SDL_AtomicInt g_videoFullscreenChoice;
+
+void MiniwinApp_SetVideoFullscreenChoice(bool p_fullscreen)
+{
+	SDL_SetAtomicInt(&g_videoFullscreenChoice, p_fullscreen ? 2 : 1);
+}
+
+bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen)
+{
+	int value = SDL_SetAtomicInt(&g_videoFullscreenChoice, 0);
+	if (value == 0) {
+		return false;
+	}
+	*p_fullscreen = value == 2;
+	return true;
+}
+
 SDL_AtomicInt g_miniwinHeartbeat;
 SDL_AtomicInt g_miniwinPhase;
 
