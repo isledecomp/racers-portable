@@ -100,7 +100,7 @@ static void DisplayArgumentHelp()
 	SDL_Log("  --language <index>   language index (seeds the emulated registry LangID)");
 	SDL_Log("  --scale <mode>       fullscreen scaling: letterbox (default) or stretch");
 	SDL_Log("  --resolution <mode>  render at native (default) or original (640x480) resolution");
-	SDL_Log("  --renderer <name>    render backend: sdlgpu (default) or opengl3");
+	SDL_Log("  --renderer <name>    render backend: sdlgpu (default), opengl3, or opengles3");
 	SDL_Log("  --help               show this help");
 	SDL_Log("Original game options (passed through):");
 	SDL_Log("  -novideo -window -primary -select3d -alphatrans -horzres <n> -vertres <n>");
@@ -160,7 +160,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			if (!MiniwinBackendFromName(argv[i + 1], &backend)) {
 				SDL_LogError(
 					SDL_LOG_CATEGORY_APPLICATION,
-					"--renderer: unknown renderer '%s' (use sdlgpu or opengl3)",
+					"--renderer: unknown renderer '%s' (use sdlgpu, opengl3, or opengles3)",
 					argv[i + 1]
 				);
 				return SDL_APP_FAILURE;

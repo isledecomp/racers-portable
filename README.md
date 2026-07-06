@@ -21,7 +21,7 @@ We are actively working to support more platforms. If you have experience with a
 
 Place the built `LEGORacers` executable next to the game's data files (`LEGO.JAM`, the `*.TUN` music files, and the intro `*.AVI` movies), or point it at them with `--path <directory>`. The original game's command-line arguments (`-window`, `-novideo`, `-horzres`, `-vertres`, …) are supported, plus:
 
-- `--renderer sdlgpu|opengl3` — select the render backend: SDL3 GPU (default; Vulkan/Metal/Direct3D 12) or OpenGL 3.3. It can also be changed in-game under Options → Video (the game relaunches to apply it).
+- `--renderer sdlgpu|opengl3|opengles3` — select the render backend: SDL3 GPU (default; Vulkan/Metal/Direct3D 12), OpenGL 3.3, or OpenGL ES 3.0 / WebGL2. It can also be changed in-game under Options → Video (the game relaunches to apply it).
 - `--scale letterbox|stretch` — fullscreen scaling: keep the 4:3 aspect ratio with black bars (default) or fill the screen.
 - `--resolution native|original` — render 3D at the display resolution (default) or at the game's original 640x480, upscaled.
 - `--language <index>` — seeds the language selection the original stored in the registry.
@@ -41,7 +41,7 @@ To achieve our goal of platform independence, we need to replace any Windows-onl
 | Joystick/Gamepad + Force Feedback, DirectInput (Input) | [SDL3](https://www.libsdl.org/) | ✅ |
 | WinMM (timers), DirectSound (Audio) | [SDL3](https://www.libsdl.org/), [miniaudio](https://miniaud.io/) | ✅ |
 | DirectDraw (2D video) | [SDL3](https://www.libsdl.org/) | ✅ |
-| Direct3D immediate mode (3D rendering) | [SDL3 GPU](https://www.libsdl.org/) (default; Vulkan/Metal/D3D12) and OpenGL 3.3; OpenGL ES 3.0 / WebGL2 planned for the web | ✅ |
+| Direct3D immediate mode (3D rendering) | [SDL3 GPU](https://www.libsdl.org/) (default; Vulkan/Metal/D3D12), OpenGL 3.3, and OpenGL ES 3.0 / WebGL2 | ✅ |
 | DirectShow, Indeo 5 (Video playback) | In-tree AVI demuxer + Indeo 5 decoder (vendored from [FFmpeg](https://ffmpeg.org/) n4.4.4, byte-exact against ffmpeg), [SDL3](https://www.libsdl.org/) | ✅ |
 | Windows Registry (Language selection) | Command line (`--language`) | ✅ |
 

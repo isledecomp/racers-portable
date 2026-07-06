@@ -41,3 +41,12 @@ bool MiniwinSdlGpu_Available();
 Uint32 MiniwinSdlGpu_PrepareWindowFlags();
 MiniwinRenderBackend* MiniwinSdlGpu_Create(SDL_Window* p_window, int p_width, int p_height);
 #endif
+
+#ifdef USE_OPENGLES3
+// OpenGL ES 3 / WebGL2. Reached through SDL_GL_GetProcAddress like the GL3 backend; a
+// GL context can't be probed before a window exists, so Available reports true and
+// Create fails cleanly on platforms with no ES driver.
+bool MiniwinGles3_Available();
+Uint32 MiniwinGles3_PrepareWindowFlags();
+MiniwinRenderBackend* MiniwinGles3_Create(SDL_Window* p_window, int p_width, int p_height);
+#endif

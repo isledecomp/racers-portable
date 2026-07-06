@@ -26,7 +26,13 @@
 
 // --- Selection config ---
 
+#if defined(USE_SDL_GPU)
 static MiniwinBackendId g_activeBackend = MINIWIN_BACKEND_SDLGPU;
+#elif defined(USE_OPENGL3)
+static MiniwinBackendId g_activeBackend = MINIWIN_BACKEND_OPENGL3;
+#else
+static MiniwinBackendId g_activeBackend = MINIWIN_BACKEND_OPENGLES3;
+#endif
 static bool g_resolved;
 static MiniwinBackendId g_resolvedBackend;
 
@@ -55,6 +61,11 @@ bool MiniwinBackendFromName(const char* p_name, MiniwinBackendId* p_id)
 		*p_id = MINIWIN_BACKEND_OPENGL3;
 		return true;
 	}
+	if (SDL_strcasecmp(p_name, "opengles3") == 0 || SDL_strcasecmp(p_name, "gles3") == 0 ||
+		SDL_strcasecmp(p_name, "gles") == 0 || SDL_strcasecmp(p_name, "webgl2") == 0) {
+		*p_id = MINIWIN_BACKEND_OPENGLES3;
+		return true;
+	}
 	return false;
 }
 
@@ -65,6 +76,8 @@ const char* MiniwinBackendName(MiniwinBackendId p_backend)
 		return "sdlgpu";
 	case MINIWIN_BACKEND_OPENGL3:
 		return "opengl3";
+	case MINIWIN_BACKEND_OPENGLES3:
+		return "opengles3";
 	}
 	return "unknown";
 }
@@ -82,6 +95,12 @@ static bool BackendCompiled(MiniwinBackendId p_backend)
 #endif
 	case MINIWIN_BACKEND_OPENGL3:
 #ifdef USE_OPENGL3
+		return true;
+#else
+		return false;
+#endif
+	case MINIWIN_BACKEND_OPENGLES3:
+#ifdef USE_OPENGLES3
 		return true;
 #else
 		return false;
@@ -105,6 +124,12 @@ static bool BackendProbe(MiniwinBackendId p_backend)
 #else
 		return false;
 #endif
+	case MINIWIN_BACKEND_OPENGLES3:
+#ifdef USE_OPENGLES3
+		return MiniwinGles3_Available();
+#else
+		return false;
+#endif
 	}
 	return false;
 }
@@ -113,9 +138,9 @@ static bool BackendProbe(MiniwinBackendId p_backend)
 // backend (enumeration and resolution both consult this).
 static bool BackendUsable(MiniwinBackendId p_backend)
 {
-	static int s_cache[2] = {-1, -1};
+	static int s_cache[3] = {-1, -1, -1};
 	int index = (int) p_backend;
-	if (index < 0 || index >= 2) {
+	if (index < 0 || index >= 3) {
 		return false;
 	}
 	if (s_cache[index] < 0) {
@@ -130,7 +155,11 @@ bool MiniwinBackendUsable(MiniwinBackendId p_backend)
 }
 
 // Preference order for fallback when the requested backend is unavailable.
-static const MiniwinBackendId c_fallbackOrder[] = {MINIWIN_BACKEND_SDLGPU, MINIWIN_BACKEND_OPENGL3};
+static const MiniwinBackendId c_fallbackOrder[] = {
+	MINIWIN_BACKEND_SDLGPU,
+	MINIWIN_BACKEND_OPENGL3,
+	MINIWIN_BACKEND_OPENGLES3,
+};
 
 static MiniwinBackendId ResolveBackend()
 {
@@ -173,6 +202,10 @@ Uint32 MiniwinBackend_PrepareWindowFlags()
 	case MINIWIN_BACKEND_OPENGL3:
 		return MiniwinGl3_PrepareWindowFlags();
 #endif
+#ifdef USE_OPENGLES3
+	case MINIWIN_BACKEND_OPENGLES3:
+		return MiniwinGles3_PrepareWindowFlags();
+#endif
 	default:
 		return 0;
 	}
@@ -195,6 +228,11 @@ MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, 
 #ifdef USE_OPENGL3
 	case MINIWIN_BACKEND_OPENGL3:
 		g_backend = MiniwinGl3_Create(p_window, p_width, p_height);
+		break;
+#endif
+#ifdef USE_OPENGLES3
+	case MINIWIN_BACKEND_OPENGLES3:
+		g_backend = MiniwinGles3_Create(p_window, p_width, p_height);
 		break;
 #endif
 	default:
@@ -246,12 +284,28 @@ MINIWIN_DEFINE_GUID(
 	0x01,
 	0x01
 );
+MINIWIN_DEFINE_GUID(
+	MINIWIN_GUID_BackendOpenGles3,
+	0x682656f3,
+	0x121a,
+	0x4d97,
+	0x9a,
+	0xb2,
+	0xc5,
+	0x88,
+	0x14,
+	0x91,
+	0x01,
+	0x02
+);
 
 const GUID* MiniwinBackendGuid(MiniwinBackendId p_backend)
 {
 	switch (p_backend) {
 	case MINIWIN_BACKEND_OPENGL3:
 		return &MINIWIN_GUID_BackendOpenGl3;
+	case MINIWIN_BACKEND_OPENGLES3:
+		return &MINIWIN_GUID_BackendOpenGles3;
 	case MINIWIN_BACKEND_SDLGPU:
 	default:
 		return &MINIWIN_GUID_BackendSdlGpu;
@@ -265,6 +319,8 @@ const char* MiniwinBackendDisplayName(MiniwinBackendId p_backend)
 		return "SDL3 GPU";
 	case MINIWIN_BACKEND_OPENGL3:
 		return "OpenGL 3.3";
+	case MINIWIN_BACKEND_OPENGLES3:
+		return "OpenGL ES 3";
 	}
 	return "Renderer";
 }
@@ -282,6 +338,10 @@ bool MiniwinBackendFromGuid(const GUID* p_guid, MiniwinBackendId* p_id)
 		*p_id = MINIWIN_BACKEND_OPENGL3;
 		return true;
 	}
+	if (*p_guid == MINIWIN_GUID_BackendOpenGles3) {
+		*p_id = MINIWIN_BACKEND_OPENGLES3;
+		return true;
+	}
 	return false;
 }
 
@@ -295,7 +355,12 @@ int MiniwinBackend_EnumDrivers(MiniwinBackendId* p_out, int p_max)
 	// Active backend first so the game's default device matching selects the running
 	// one; only usable backends are listed so a menu pick can never re-launch into a
 	// backend that would just fall back (which would loop).
-	MiniwinBackendId ordered[] = {ResolveBackend(), MINIWIN_BACKEND_SDLGPU, MINIWIN_BACKEND_OPENGL3};
+	MiniwinBackendId ordered[] = {
+		ResolveBackend(),
+		MINIWIN_BACKEND_SDLGPU,
+		MINIWIN_BACKEND_OPENGL3,
+		MINIWIN_BACKEND_OPENGLES3,
+	};
 	int count = 0;
 	for (MiniwinBackendId candidate : ordered) {
 		if (count >= p_max || !BackendCompiled(candidate) || !BackendUsable(candidate)) {

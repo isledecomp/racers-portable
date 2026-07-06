@@ -7,6 +7,8 @@ if (EMSCRIPTEN)
   add_link_options(
     -sUSE_WEBGL2=1
     -sMIN_WEBGL_VERSION=2
+    -sMAX_WEBGL_VERSION=2
+    -sGL_ENABLE_GET_PROC_ADDRESS=1
     -sALLOW_MEMORY_GROWTH=1
     -sINITIAL_MEMORY=128mb
     -sMAXIMUM_MEMORY=2gb
@@ -194,6 +196,8 @@ if (EXISTS "${CLANGFORMAT_BIN}")
         "${PROJECT_SOURCE_DIR}/common/*.h"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengl3/*.h"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengl3/*.cpp"
+        "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengles3/*.h"
+        "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengles3/*.cpp"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/*.h"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/*.cpp"
         "${PROJECT_SOURCE_DIR}/miniwin/src/ddraw/*.h"

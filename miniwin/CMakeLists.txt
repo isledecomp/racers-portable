@@ -29,8 +29,7 @@ add_library(miniwin STATIC
 
 # Render backends are selected at build time per platform, mirroring isle-portable:
 # each entry becomes a USE_* compile definition, and the matching source is compiled
-# only when its entry is present. A future OpenGL ES 3 / WebGL2 backend for the web
-# target slots in here.
+# only when its entry is present.
 list(APPEND GRAPHICS_BACKENDS USE_SDL_GPU)
 
 # Desktop OpenGL 3.3 core. Reached through SDL_GL_GetProcAddress, so no OpenGL library
@@ -40,7 +39,15 @@ if(NOT (EMSCRIPTEN OR ANDROID OR IOS OR VITA OR NINTENDO_SWITCH OR NINTENDO_3DS 
   list(APPEND GRAPHICS_BACKENDS USE_OPENGL3)
 endif()
 
-# SDL_GPU has no web backend yet; drop it there (the future GLES3 backend covers web).
+# OpenGL ES 3 / WebGL2. Also loaded through SDL_GL_GetProcAddress (no GLES library is
+# linked; SDL supplies GLES/ANGLE natively and WebGL2 under Emscripten). This is the web
+# target's only backend and an optional desktop/mobile one; excluded only where SDL has
+# no GL/GLES at all.
+if(NOT (VITA OR NINTENDO_SWITCH OR NINTENDO_3DS OR WINDOWS_STORE))
+  list(APPEND GRAPHICS_BACKENDS USE_OPENGLES3)
+endif()
+
+# SDL_GPU has no web backend; drop it there (the GLES3 backend covers web).
 if(EMSCRIPTEN)
   list(REMOVE_ITEM GRAPHICS_BACKENDS USE_SDL_GPU)
 endif()
@@ -51,6 +58,10 @@ endif()
 
 if(USE_OPENGL3 IN_LIST GRAPHICS_BACKENDS)
   target_sources(miniwin PRIVATE src/d3d/backends/opengl3/renderer.cpp)
+endif()
+
+if(USE_OPENGLES3 IN_LIST GRAPHICS_BACKENDS)
+  target_sources(miniwin PRIVATE src/d3d/backends/opengles3/renderer.cpp)
 endif()
 
 target_compile_definitions(miniwin PUBLIC MINIWIN ${GRAPHICS_BACKENDS})
