@@ -1,6 +1,7 @@
 #ifndef GOLD3DTEXTURE_H
 #define GOLD3DTEXTURE_H
 
+#include "goldp_export.h"
 #include "golname.h"
 #include "golsurfaceformat.h"
 #include "goltexture.h"
@@ -18,7 +19,7 @@ class GolTextureList;
 
 // VTABLE: GOLDP 0x1005681c
 // SIZE 0x7c
-class GolD3DTexture : public GolTexture {
+class GOLDP_EXPORT GolD3DTexture : public GolTexture {
 public:
 	GolD3DTexture();
 	~GolD3DTexture() override; // vtable+0x00

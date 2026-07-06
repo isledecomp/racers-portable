@@ -3,12 +3,13 @@
 
 #include "compat.h"
 #include "decomp.h"
+#include "goldp_export.h"
 #include "render/gold3drenderdevice.h"
 #include "render/goldrawstate.h"
 
 // VTABLE: GOLDP 0x10056994
 // SIZE 0x20
-class GolCommonDrawState : public GolDrawState {
+class GOLDP_EXPORT GolCommonDrawState : public GolDrawState {
 protected:
 	GolCommonDrawState();
 

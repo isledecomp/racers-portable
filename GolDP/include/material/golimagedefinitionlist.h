@@ -1,6 +1,7 @@
 #ifndef GOLIMAGEDEFINITIONLIST_H
 #define GOLIMAGEDEFINITIONLIST_H
 
+#include "goldp_export.h"
 #include "golnametable.h"
 #include "material/golimagelist.h"
 
@@ -8,7 +9,7 @@ class GolD3DRenderDevice;
 
 // SIZE 0x20
 // VTABLE: GOLDP 0x10056364
-class GolImageDefinitionList : public GolImageList {
+class GOLDP_EXPORT GolImageDefinitionList : public GolImageList {
 public:
 	GolImageDefinitionList();
 	~GolImageDefinitionList() override;

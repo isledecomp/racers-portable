@@ -1,6 +1,7 @@
 #ifndef GOLIMAGELIST_H
 #define GOLIMAGELIST_H
 
+#include "goldp_export.h"
 #include "golhashtable.h"
 #include "golnametable.h"
 #include "image/golimage.h"
@@ -9,7 +10,7 @@
 class GolD3DRenderDevice;
 
 // VTABLE: GOLDP 0x10056f28
-class GolImageList : public GolNameTable {
+class GOLDP_EXPORT GolImageList : public GolNameTable {
 public:
 	// .idb tokens (parsed with the plain shared parser; ids proven by the
 	// flag/field each one feeds)

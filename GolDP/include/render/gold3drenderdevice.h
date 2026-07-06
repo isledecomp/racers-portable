@@ -3,6 +3,7 @@
 
 #include "compat.h"
 #include "decomp.h"
+#include "goldp_export.h"
 #include "material/golsoftwarematerial.h"
 #include "render/golrenderdevice.h"
 #include "render/golsoftwarerenderer.h"
@@ -23,7 +24,7 @@ typedef void (GolD3DRenderDevice::*DrawTriangleFunction)(LegoU32, LegoU32, LegoU
 
 // VTABLE: GOLDP 0x100565b8
 // SIZE 0xc8770
-class GolD3DRenderDevice : public GolRenderDevice {
+class GOLDP_EXPORT GolD3DRenderDevice : public GolRenderDevice {
 public:
 	// SIZE 0x18
 	struct TextureFormat : public GolSurfaceFormat {

@@ -3,6 +3,7 @@
 
 #include "decomp.h"
 #include "fourbytes.h"
+#include "goldp_export.h"
 #include "golsurfaceformat.h"
 #include "goltexture.h"
 #include "surface/color.h"
@@ -14,7 +15,7 @@ class GolD3DTexture;
 // SIZE 0x04
 // VTABLE: GOLDP 0x10056ee4
 // SIZE 0x50
-class GolTiledTexture {
+class GOLDP_EXPORT GolTiledTexture {
 public:
 	// m_flags uses the GolTexture::c_textureFlag* vocabulary (copied verbatim
 	// into each tile's GolTexture::m_textureFlags by CreateTiles).

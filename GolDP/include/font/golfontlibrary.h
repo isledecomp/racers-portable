@@ -1,6 +1,7 @@
 #ifndef GOLFONTLIBRARY_H
 #define GOLFONTLIBRARY_H
 
+#include "goldp_export.h"
 #include "golhashtable.h"
 #include "golnametable.h"
 #include "goltxtparser.h"
@@ -14,7 +15,7 @@ class GolString;
 
 // VTABLE: GOLDP 0x10056e08
 // SIZE 0x28
-class GolFontLibrary : public GolNameTable {
+class GOLDP_EXPORT GolFontLibrary : public GolNameTable {
 public:
 	// VTABLE: GOLDP 0x10056e30
 	// SIZE 0x1fc

@@ -3,6 +3,7 @@
 
 #include "compat.h"
 #include "decomp.h"
+#include "goldp_export.h"
 #include "surface/goldisplaysurface.h"
 #include "types.h"
 
@@ -10,7 +11,7 @@
 
 // VTABLE: GOLDP 0x10056d6c
 // SIZE 0x18
-class GolDrawState {
+class GOLDP_EXPORT GolDrawState {
 protected:
 	GolDrawState();
 

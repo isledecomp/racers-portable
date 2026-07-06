@@ -1,6 +1,7 @@
 #ifndef GOLTEXTURELIST_H
 #define GOLTEXTURELIST_H
 
+#include "goldp_export.h"
 #include "golhashtable.h"
 #include "golnametable.h"
 #include "golsurfaceformat.h"
@@ -33,7 +34,7 @@ public:
 
 // VTABLE: GOLDP 0x100575ac
 // SIZE 0x20
-class GolTextureList : public GolNameTable {
+class GOLDP_EXPORT GolTextureList : public GolNameTable {
 public:
 	// VTABLE: GOLDP 0x100575d8
 	// SIZE 0x1fc

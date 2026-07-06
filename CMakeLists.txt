@@ -26,6 +26,7 @@ endif()
 include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
 include(FetchContent)
+include(GenerateExportHeader)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -135,6 +136,10 @@ target_include_directories(goldp PRIVATE
   "${PROJECT_SOURCE_DIR}/common/include"
   "${PROJECT_SOURCE_DIR}/util"
 )
+generate_export_header(goldp BASE_NAME GOLDP EXPORT_FILE_NAME "${CMAKE_CURRENT_BINARY_DIR}/goldp_export.h")
+target_include_directories(goldp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}")
+set_property(TARGET goldp PROPERTY C_VISIBILITY_PRESET hidden)
+set_property(TARGET goldp PROPERTY CXX_VISIBILITY_PRESET hidden)
 target_link_libraries(goldp PRIVATE miniwin SDL3::SDL3)
 if (WIN32 AND BUILD_SHARED_LIBS)
   target_sources(goldp PRIVATE GolDP/GolDP.def)

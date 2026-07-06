@@ -2,6 +2,7 @@
 #define GOLDP_GOL_H
 
 #include "decomp.h"
+#include "goldp_export.h"
 #include "types.h"
 
 #include <windows.h>
@@ -86,9 +87,9 @@ extern "C"
 {
 #endif
 
-	extern GolExport* GolEntry(GolImport* p_import);
+	extern GOLDP_EXPORT GolExport* GolEntry(GolImport* p_import);
 
-	extern void GolExit();
+	extern GOLDP_EXPORT void GolExit();
 
 #ifdef __cplusplus
 } // extern "C"

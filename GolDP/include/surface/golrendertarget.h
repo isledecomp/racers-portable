@@ -3,6 +3,7 @@
 
 #include "compat.h"
 #include "device/goldirectdrawpalette.h"
+#include "goldp_export.h"
 #include "surface/goldepthbuffer.h"
 #include "surface/goldisplaysurface.h"
 
@@ -10,7 +11,7 @@ class GolD3DRenderDevice;
 
 // VTABLE: GOLDP 0x1005627c
 // SIZE 0x58
-class GolRenderTarget : public GolDisplaySurface {
+class GOLDP_EXPORT GolRenderTarget : public GolDisplaySurface {
 public:
 	GolRenderTarget();
 	~GolRenderTarget() override;                                                       // vtable+0x00

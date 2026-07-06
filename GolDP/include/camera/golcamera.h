@@ -5,6 +5,7 @@
 #include "compat.h"
 #include "decomp.h"
 #include "golcamerabase.h"
+#include "goldp_export.h"
 #include "types.h"
 
 #include <d3d.h>
@@ -14,7 +15,7 @@ class GolD3DRenderDevice;
 
 // VTABLE: GOLDP 0x100561f8
 // SIZE 0x344
-class GolCamera : public GolCameraBase {
+class GOLDP_EXPORT GolCamera : public GolCameraBase {
 public:
 	GolCamera();
 	void UpdateViewMatrix() override;                                     // vtable+0x00

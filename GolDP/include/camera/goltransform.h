@@ -2,13 +2,14 @@
 #define GOLTRANSFORM_H
 
 #include "compat.h"
+#include "goldp_export.h"
 #include "golmath.h"
 #include "goltransformbase.h"
 #include "types.h"
 
 // VTABLE: GOLDP 0x1005622c
 // SIZE 0xd0
-class GolTransform : public GolTransformBase {
+class GOLDP_EXPORT GolTransform : public GolTransformBase {
 public:
 	GolTransform();
 	void VTable0x00() override;                                                  // vtable+0x00

@@ -1,6 +1,7 @@
 #ifndef GOLWORLDDATABASE_H
 #define GOLWORLDDATABASE_H
 
+#include "goldp_export.h"
 #include "golmath.h"
 #include "golname.h"
 #include "golnametable.h"
@@ -35,7 +36,7 @@ struct Rect;
 
 // VTABLE: GOLDP 0x100576ec
 // SIZE 0xf0
-class GolWorldDatabase {
+class GOLDP_EXPORT GolWorldDatabase {
 	friend class DriverHeadBuilder;
 
 public:

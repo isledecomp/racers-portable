@@ -2,6 +2,7 @@
 #define GOLDP_GOLFONTTABLE_H
 
 #include "font/golfontlibrary.h"
+#include "goldp_export.h"
 #include "types.h"
 
 class GolD3DRenderDevice;
@@ -9,7 +10,7 @@ class GolFont;
 
 // VTABLE: GOLDP 0x100562b4
 // SIZE 0x2c
-class GolFontTable : public GolFontLibrary {
+class GOLDP_EXPORT GolFontTable : public GolFontLibrary {
 public:
 	GolFontTable();
 	~GolFontTable() override; // vtable+0x00
