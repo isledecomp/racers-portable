@@ -378,7 +378,11 @@ bool MiniwinSdlGpuBackend::Init(SDL_Window* p_window)
 	SDL_GPUDevice* device = nullptr;
 	bool claimed = false;
 	MiniwinApp_RunOnMainThread([&]() {
-		device = SDL_CreateGPUDevice(AvailableShaderFormats(), false, nullptr);
+		bool debug_mode = SDL_GetEnvironmentVariable(SDL_GetEnvironment(), "RACERS_SDLGPU_DEBUG") != NULL;
+		if (debug_mode) {
+			SDL_Log("Enabling SDL_GPU debug mode");
+		}
+		device = SDL_CreateGPUDevice(AvailableShaderFormats(), debug_mode, nullptr);
 		if (device) {
 			claimed = SDL_ClaimWindowForGPUDevice(device, p_window);
 		}
