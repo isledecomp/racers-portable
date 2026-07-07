@@ -86,8 +86,18 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 		// a persisted renderer preference can never leave the game unable to open a window.
 		for (;;) {
 			SDL_GL_ResetAttributes();
-			Uint32 backendFlags = MiniwinBackend_PrepareWindowFlags();
-			window = SDL_CreateWindow(title, 640, 480, SDL_WINDOW_HIDDEN | backendFlags);
+			// HIGH_PIXEL_DENSITY: draw at the display's real pixel count on HiDPI screens so
+			// --resolution native is truly native (no-op at ratio 1). Cursor math is point-space
+			// (SDL_GetWindowSize), so unaffected; --resolution original opts out of the fill.
+			Uint32 windowFlags =
+				SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY | MiniwinBackend_PrepareWindowFlags();
+#ifdef __EMSCRIPTEN__
+			// RESIZABLE: the canvas fills the tab via CSS (100vw/vh) and SDL tracks that size on
+			// resize. SDL's fill-document mode is unusable here (OffscreenCanvas under
+			// PROXY_TO_PTHREAD). HIGH_PIXEL_DENSITY also sizes the canvas backing store.
+			windowFlags |= SDL_WINDOW_RESIZABLE;
+#endif
+			window = SDL_CreateWindow(title, 640, 480, windowFlags);
 			if (window || !MiniwinBackend_DemoteActiveBackend()) {
 				break;
 			}
@@ -255,6 +265,17 @@ static void ApplyWindowMode(HWND p_hWnd, LegoBool32 p_fullscreen, LegoU32 p_widt
 	}
 
 	MiniwinApp_RunOnMainThread([window, p_fullscreen, p_width, p_height]() {
+#ifdef __EMSCRIPTEN__
+		// Soft fullscreen only: the canvas already fills the browser tab (sized by CSS, adopted
+		// as the window size) and SDL tracks it via SDL_WINDOW_RESIZABLE. Never call
+		// SDL_SetWindowFullscreen (the browser Fullscreen API / "real" F11 fullscreen) or
+		// SDL_SetWindowSize (which would fight the CSS sizing).
+		(void) p_fullscreen;
+		(void) p_width;
+		(void) p_height;
+		SDL_ShowWindow(window);
+		SDL_RaiseWindow(window);
+#else
 		if (p_fullscreen) {
 			SDL_SetWindowSize(window, (int) p_width, (int) p_height);
 			SDL_SetWindowFullscreen(window, true);
@@ -266,6 +287,7 @@ static void ApplyWindowMode(HWND p_hWnd, LegoBool32 p_fullscreen, LegoU32 p_widt
 		}
 		SDL_ShowWindow(window);
 		SDL_RaiseWindow(window);
+#endif
 	});
 }
 
@@ -292,6 +314,13 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 			m_flags &= ~c_flagFullscreen;
 		}
 	}
+
+#ifdef __EMSCRIPTEN__
+	// Browsers can't enter true fullscreen without a user gesture, and we never enter the
+	// browser's real fullscreen at all (ToggleFullscreen is a no-op on the web). Boot into
+	// (soft) windowed mode; the canvas already fills the tab via CSS, so this stays cleared.
+	m_flags &= ~c_flagFullscreen;
+#endif
 
 	m_windowStateChanging = TRUE;
 
@@ -327,6 +356,11 @@ LegoS32 Win32GolApp::InitializeDisplay(LegoU32 p_width, LegoU32 p_height, LegoU3
 // FUNCTION: LEGORACERS 0x00416cd0
 void Win32GolApp::ToggleFullscreen()
 {
+#ifdef __EMSCRIPTEN__
+	// Soft fullscreen only: the canvas always fills the browser tab and we never enter the
+	// browser's real fullscreen, so there is nothing to toggle.
+	return;
+#endif
 	if (m_golDrawState->GetFlags() & GolDrawState::c_flagCreated) {
 		OutputDebugString("Toggling full-screen mode\n");
 
@@ -389,6 +423,13 @@ void Win32GolApp::UpdateMousePosition()
 			LegoFloat xScale = (LegoFloat) (bottomRight.x - topLeft.x) / width;
 			LegoFloat height = (LegoFloat) m_golDrawState->m_height;
 			LegoFloat yScale = (LegoFloat) (bottomRight.y - topLeft.y) / height;
+#ifdef __EMSCRIPTEN__
+			// Keep DirectInput's relative mouse deltas in the same UI space as the absolute
+			// cursor (window space scaled by xScale/yScale). The web menu cursor follows the
+			// absolute position, but menu widgets still read these deltas, so leaving them in
+			// raw window space would scale drag input by the fill factor.
+			MiniwinInput_SetMouseScale(1.0f / xScale, 1.0f / yScale);
+#endif
 			cursorPos.x -= topLeft.x;
 			cursorPos.y -= topLeft.y;
 			cursorPos.x = static_cast<LONG>(static_cast<LegoFloat>(cursorPos.x) / xScale);
@@ -405,8 +446,8 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 	UpdateMousePosition();
 
 	// Replaces the PeekMessage pump + AppWndProc: SDL events (forwarded from the main
-	// thread) are dispatched to the same GolAppEventHandler notifications the Win32
-	// window procedure produced.
+	// thread, or pumped inline in MiniwinApp_PollEvent on the web) are dispatched to the
+	// same GolAppEventHandler notifications the Win32 window procedure produced.
 	SDL_Event event;
 	do {
 		while (MiniwinApp_PollEvent(event)) {
@@ -512,6 +553,14 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 			Sleep(50);
 		}
 	} while (m_disabled);
+
+#ifdef __EMSCRIPTEN__
+	// Re-read the cursor after this frame's input is drained so the drawn cursor tracks the
+	// current mouse with no one-frame lag; the read at the top of Tick is stale by exactly the
+	// events just processed. (Desktop compensates with the DirectInput relative accumulation,
+	// which the web disables because the browser provides an absolute cursor.)
+	UpdateMousePosition();
+#endif
 
 	DWORD time = timeGetTime();
 	m_frameDeltaMs = time - m_lastFrameTimeMs;

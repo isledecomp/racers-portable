@@ -584,6 +584,15 @@ bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedS
 // read-only (e.g. Program Files on Windows). p_out is left empty on failure.
 void MiniwinGetUserDataPath(char* p_out, size_t p_size);
 
+#ifdef __EMSCRIPTEN__
+// Registers a streamed data file by its correct-case absolute mount path (e.g.
+// "/racers/HVSCmp.avi"). The web fetch backend cannot enumerate a directory, so
+// MiniwinResolvePath uses this registry to case-fold the game's data-file opens
+// ("hvscmp.avi") to the correct-case path the server hosts. Populated once by
+// Racers_SetupWebFilesystem (LEGORacers/emscripten/filesystem.cpp).
+void MiniwinRegisterWebDataFile(const char* p_mountPath);
+#endif
+
 // --- Functions: registry ---
 LSTATUS RegOpenKey(HKEY hKey, LPCSTR lpSubKey, PHKEY phkResult);
 LSTATUS RegOpenKeyEx(HKEY hKey, LPCSTR lpSubKey, DWORD ulOptions, REGSAM samDesired, PHKEY phkResult);

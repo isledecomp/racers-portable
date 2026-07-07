@@ -250,7 +250,16 @@ BOOL GetCursorPos(LPPOINT lpPoint)
 
 	float x = 0.f;
 	float y = 0.f;
+#ifdef __EMSCRIPTEN__
+	// The web has no global screen space. Report the cursor in window (canvas) coordinates --
+	// the space GetClientRect and (web) ClientToScreen use -- so the game's cursor mapping is
+	// consistent. SDL_GetGlobalMouseState returns page/screen coordinates that carry the
+	// browser-window offset and don't line up with the canvas, making the drawn cursor jump
+	// and clamp to part of the screen.
+	SDL_GetMouseState(&x, &y);
+#else
 	SDL_GetGlobalMouseState(&x, &y);
+#endif
 	lpPoint->x = (LONG) x;
 	lpPoint->y = (LONG) y;
 	return TRUE;
@@ -262,6 +271,11 @@ BOOL ClientToScreen(HWND hWnd, LPPOINT lpPoint)
 		return FALSE;
 	}
 
+#ifdef __EMSCRIPTEN__
+	// Window space is screen space on the web (a single canvas at the origin), and
+	// GetCursorPos already returns window coordinates, so this is the identity.
+	(void) hWnd;
+#else
 	int x = 0;
 	int y = 0;
 	if (hWnd) {
@@ -270,6 +284,7 @@ BOOL ClientToScreen(HWND hWnd, LPPOINT lpPoint)
 
 	lpPoint->x += x;
 	lpPoint->y += y;
+#endif
 	return TRUE;
 }
 

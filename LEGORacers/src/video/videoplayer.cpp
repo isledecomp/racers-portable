@@ -112,6 +112,13 @@ int VideoPlayer::Begin(Win32GolApp* p_golApp, DWORD p_width, DWORD p_height)
 
 	bool fullscreen = WantsFullscreen();
 	MiniwinApp_RunOnMainThread([window, p_width, p_height, fullscreen]() {
+#ifdef __EMSCRIPTEN__
+		// Soft fullscreen only: the canvas fills the browser tab via CSS. Never enter the
+		// browser's real fullscreen or resize the canvas.
+		(void) p_width;
+		(void) p_height;
+		(void) fullscreen;
+#else
 		if (fullscreen) {
 			SDL_SetWindowFullscreen(window, true);
 		}
@@ -119,6 +126,7 @@ int VideoPlayer::Begin(Win32GolApp* p_golApp, DWORD p_width, DWORD p_height)
 			SDL_SetWindowSize(window, (int) p_width, (int) p_height);
 			SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
 		}
+#endif
 		SDL_ShowWindow(window);
 	});
 
@@ -237,17 +245,20 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 			else if (
 				event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)
 			) {
+#ifndef __EMSCRIPTEN__
 				// Alt+Enter toggles fullscreen, mirroring the game's message pump. The
 				// game's own toggle is unavailable here (its display does not exist until
 				// the movies finish), so drive the window directly and hand the resulting
 				// mode to the game's first display init; the backend reads the drawable
-				// size every present, so the letterbox follows.
+				// size every present, so the letterbox follows. On the web we stay in soft
+				// fullscreen (fill the tab) and never enter the browser's real fullscreen.
 				SDL_Window* window = g_video->m_window;
 				MiniwinApp_RunOnMainThread([window]() {
 					bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
 					SDL_SetWindowFullscreen(window, !fullscreen);
 					MiniwinApp_SetVideoFullscreenChoice(!fullscreen);
 				});
+#endif
 			}
 			else if (
 				p_abortableOnKey && ((event.type == SDL_EVENT_KEY_DOWN && !IsModifierKey(event.key.key)) ||

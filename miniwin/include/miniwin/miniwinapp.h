@@ -17,6 +17,11 @@ bool MiniwinApp_PollEvent(SDL_Event& p_event);
 // (keyboard/mouse rings). Call once per polled event, on the game thread.
 void MiniwinInput_HandleEvent(const SDL_Event& p_event);
 
+// Scales the relative mouse deltas fed to DirectInput into the game's cursor coordinate space
+// (1.0 = no scaling). Used on the web, where the window fills the browser tab but the UI
+// renders at a smaller fixed resolution, so unscaled deltas overshoot the cursor.
+void MiniwinInput_SetMouseScale(float p_scaleX, float p_scaleY);
+
 // Runs a callable synchronously on the main thread (window management must happen
 // there on some platforms). Safe to call from the main thread itself.
 template <typename F>
@@ -101,6 +106,11 @@ void MiniwinBackend_PresentVideoFrame(SDL_Window* p_window, const void* p_rgba, 
 // consumes it once (returning false when none was recorded, e.g. -novideo).
 void MiniwinApp_SetVideoFullscreenChoice(bool p_fullscreen);
 bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen);
+
+// True when the main window is in real (SDL) fullscreen. The menu cursor uses this: the relative
+// (DirectInput) cursor accumulation is only correct in the captured-mouse fullscreen model;
+// windowed mode positions the cursor from the absolute mouse instead. Safe on the game thread.
+bool MiniwinApp_IsWindowFullscreen();
 
 // Destroys the shared render backend. Call at application shutdown.
 void MiniwinBackend_Shutdown();

@@ -248,6 +248,14 @@ static MiniwinRenderBackend* g_backend;
 // read the live fullscreen/windowed state.
 static SDL_Window* g_backendWindow;
 
+// The main window's live fullscreen state (a plain flag read; SDL_WINDOW_FULLSCREEN changes only
+// on the main thread during a toggle, so a one-frame-stale read from the game thread during a
+// transition is harmless). See the menu cursor in menuinputdispatcher.cpp.
+bool MiniwinApp_IsWindowFullscreen()
+{
+	return g_backendWindow && (SDL_GetWindowFlags(g_backendWindow) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
 MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, int p_height)
 {
 	if (g_backend || !p_window) {
@@ -554,7 +562,12 @@ void MiniwinBackend_Relaunch(MiniwinBackendId p_backend)
 	// game's already-persisted state is what carries over.
 	char** argv = args.data();
 	MiniwinApp_RunOnMainThread([&exe, argv]() {
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+		// No process re-exec in the browser; only one backend is compiled so this path is
+		// unreachable. A future software renderer would reload the page instead.
+		(void) exe;
+		(void) argv;
+#elif defined(_WIN32)
 		_execv(exe, argv);
 #else
 		execv(exe, argv);

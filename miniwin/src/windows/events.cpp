@@ -148,6 +148,19 @@ bool MiniwinApp_PollEvent(SDL_Event& p_event)
 	EnsureWatchdog();
 	SDL_AddAtomicInt(&g_miniwinHeartbeat, 1);
 
+#ifdef __EMSCRIPTEN__
+	// On the web the blocking game loop runs on the main thread, so no SDL_AppEvent callback
+	// fires. Pump SDL events into the queue here (before locking; MiniwinApp_PushEvent takes
+	// the same mutex) so every loop that drains this queue — intro videos, menus, races —
+	// receives input. SDL_PollEvent runs on the main thread, which is where the game lives.
+	{
+		SDL_Event sdlEvent;
+		while (SDL_PollEvent(&sdlEvent)) {
+			MiniwinApp_PushEvent(sdlEvent);
+		}
+	}
+#endif
+
 	EnsureQueue();
 	SDL_LockMutex(g_queueMutex);
 

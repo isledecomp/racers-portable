@@ -11,6 +11,7 @@
 #include "render/goldrawstate.h"
 
 #include <memory.h>
+#include <miniwin/miniwinapp.h>
 
 DECOMP_SIZE_ASSERT(MenuInputDispatcher, 0x60)
 DECOMP_SIZE_ASSERT(MenuInputDispatcher::Cursor::InitStruct, 0x24)
@@ -272,7 +273,12 @@ LegoS32 MenuInputDispatcher::Update(undefined4 p_elapsedMs)
 			DispatchMouseMove(mouse);
 		}
 
-		if (m_drawState->m_flags & GolDrawState::c_flagHardwareDevice) {
+		// [library:input] The relative (DirectInput) accumulation is the captured-mouse model,
+		// meant for fullscreen. In windowed mode the absolute OnCursorMoved path already positions
+		// the cursor every frame, so also accumulating the relative deltas double-counts the motion
+		// (rubber-banding). Only accumulate in true fullscreen; windowed -- and the web, which is
+		// never real fullscreen -- relies on the absolute path.
+		if ((m_drawState->m_flags & GolDrawState::c_flagHardwareDevice) && MiniwinApp_IsWindowFullscreen()) {
 			m_cursor.UpdatePosition(p_elapsedMs);
 		}
 	}

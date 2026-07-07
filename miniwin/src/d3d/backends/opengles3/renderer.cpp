@@ -223,6 +223,10 @@ bool MiniwinGles3Backend::Init(SDL_Window* p_window)
 {
 	m_window = p_window;
 
+	// Use SDL's GL context. On the web this is the context bound to the visible canvas (the
+	// game runs on the canvas-owning thread, so creation succeeds); the frame is presented in
+	// Present() by SDL_GL_SwapWindow, whose asyncify yield returns to the browser so the
+	// implicit OffscreenCanvas swap fires (the blocking game loop otherwise never would).
 	m_context = SDL_GL_CreateContext(p_window);
 	if (!m_context) {
 		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_GL_CreateContext failed: %s", SDL_GetError());
@@ -240,10 +244,12 @@ bool MiniwinGles3Backend::Init(SDL_Window* p_window)
 	}
 
 	SDL_LogInfo(LOG_CATEGORY_MINIWIN, "OpenGL ES renderer: %s", (const char*) gl.glGetString(GL_VERSION));
-	// The game has its own frame limiter; vsync is available for diagnosis
-	// (RACERS_VSYNC=1).
+#ifndef __EMSCRIPTEN__
+	// The game has its own frame limiter; vsync is available for diagnosis (RACERS_VSYNC=1).
+	// Skipped on the web, where asyncify drives presentation through SDL_GL_SwapWindow.
 	const char* vsyncEnv = getenv("RACERS_VSYNC");
 	SDL_GL_SetSwapInterval(vsyncEnv && vsyncEnv[0] == '1' ? 1 : 0);
+#endif
 
 	GLuint vs = CompileShader(GL_VERTEX_SHADER, g_vertexShader);
 	GLuint fs = CompileShader(GL_FRAGMENT_SHADER, g_fragmentShader);
@@ -897,6 +903,8 @@ void MiniwinGles3Backend::Present()
 
 	{
 		MiniwinSlowOpLog slowLog("SwapWindow", "");
+		// On the web (asyncify), SDL_GL_SwapWindow yields to the browser via emscripten_sleep,
+		// which is what triggers the implicit OffscreenCanvas present and event processing.
 		SDL_GL_SwapWindow(m_window);
 	}
 

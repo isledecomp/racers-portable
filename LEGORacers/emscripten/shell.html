@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LEGO Racers</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* Fill the browser tab; SDL adopts this as the window size and tracks it on resize. */
+  #canvas { display: block; background: #000; outline: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
+  #status { position: fixed; top: 8px; left: 12px; color: #888; font: 12px system-ui, sans-serif; z-index: 1; }
+</style>
+</head>
+<body>
+<canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<div id="status">loading…</div>
+<script>
+  var statusEl = document.getElementById('status');
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    // Launch options from the URL query, e.g.
+    //   LEGORacers.html?args=--scale stretch --language 3 -novideo
+    arguments: (function () {
+      try {
+        var a = new URLSearchParams(location.search).get('args');
+        return a ? a.trim().split(/\s+/) : [];
+      } catch (e) { return []; }
+    })(),
+    setStatus: function (t) { if (statusEl) statusEl.textContent = t; },
+    printErr: function (t) { console.error(t); },
+    onRuntimeInitialized: function () { if (statusEl) statusEl.style.display = 'none'; }
+  };
+  window.onerror = function (m) { Module.setStatus('error — see console'); };
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>

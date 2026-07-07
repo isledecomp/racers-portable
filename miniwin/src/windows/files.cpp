@@ -18,6 +18,29 @@
 #include <unistd.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include <string>
+#include <vector>
+#endif
+
+#ifdef __EMSCRIPTEN__
+// Registry of streamed data files (correct-case absolute mount paths). The web fetch
+// backend cannot list a directory, so MiniwinResolvePath case-folds against this instead
+// of readdir. A function-local static sidesteps static-init ordering.
+static std::vector<std::string>& WebDataFiles()
+{
+	static std::vector<std::string> files;
+	return files;
+}
+
+void MiniwinRegisterWebDataFile(const char* p_mountPath)
+{
+	if (p_mountPath && p_mountPath[0]) {
+		WebDataFiles().emplace_back(p_mountPath);
+	}
+}
+#endif
+
 // Resolve a game path to an on-disk path: '\\'→'/', then (on case-sensitive systems)
 // resolve each component case-insensitively against the directory listing.
 bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedSize)
@@ -33,7 +56,25 @@ bool MiniwinResolvePath(const char* p_path, char* p_resolved, size_t p_resolvedS
 		}
 	}
 
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+	// The web fetch backend cannot enumerate a directory, so resolve case from the static
+	// registry instead of readdir: match the request's basename against a registered data
+	// file (case-insensitive) and return its correct-case mount path. Everything else
+	// (absolute OPFS save/preference paths, already-correct paths) passes through.
+	{
+		const char* base = strrchr(p_resolved, '/');
+		base = base ? base + 1 : p_resolved;
+		for (const std::string& entry : WebDataFiles()) {
+			const char* entryBase = strrchr(entry.c_str(), '/');
+			entryBase = entryBase ? entryBase + 1 : entry.c_str();
+			if (strcasecmp(entryBase, base) == 0) {
+				SDL_strlcpy(p_resolved, entry.c_str(), p_resolvedSize);
+				return true;
+			}
+		}
+	}
+	return true;
+#elif defined(_WIN32)
 	return true;
 #else
 	if (access(p_resolved, F_OK) == 0) {
@@ -129,6 +170,13 @@ void MiniwinGetUserDataPath(char* p_out, size_t p_size)
 		return;
 	}
 
+#ifdef __EMSCRIPTEN__
+	// SDL_GetPrefPath is a non-persistent MEMFS path on the web; use the OPFS mount set up
+	// by Racers_SetupWebFilesystem (LEGORacers/emscripten/filesystem.cpp) so saves and the
+	// renderer preference survive reloads. The trailing slash matches SDL_GetPrefPath.
+	// Keep in sync with Racers_userDataMount ("/racers-user").
+	SDL_strlcpy(p_out, "/racers-user/", p_size);
+#else
 	// SDL_GetPrefPath creates the directory and is comparatively costly, so cache it. The
 	// returned path already ends with the platform path separator.
 	static char s_base[1024];
@@ -141,6 +189,7 @@ void MiniwinGetUserDataPath(char* p_out, size_t p_size)
 	}
 
 	SDL_strlcpy(p_out, s_base, p_size);
+#endif
 }
 
 // --- Win32 file API (used by the music streaming code) ---

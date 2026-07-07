@@ -275,6 +275,15 @@ struct InputRing {
 static InputRing g_keyboardRing;
 static InputRing g_mouseRing;
 
+static float g_mouseScaleX = 1.0f;
+static float g_mouseScaleY = 1.0f;
+
+void MiniwinInput_SetMouseScale(float p_scaleX, float p_scaleY)
+{
+	g_mouseScaleX = p_scaleX;
+	g_mouseScaleY = p_scaleY;
+}
+
 void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 {
 	switch (p_event.type) {
@@ -289,14 +298,26 @@ void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 		}
 		break;
 	}
-	case SDL_EVENT_MOUSE_MOTION:
-		if (p_event.motion.xrel != 0.0f) {
-			g_mouseRing.Push(DIMOFS_X, (DWORD) (LONG) p_event.motion.xrel);
+	case SDL_EVENT_MOUSE_MOTION: {
+		// Scale the raw window-space delta into the game's cursor space (consumed by the menu
+		// cursor's relative accumulation and by widget drag handlers). The fractional remainder
+		// is carried across events so slow motion is not lost to integer rounding.
+		static float accumX = 0.0f;
+		static float accumY = 0.0f;
+		accumX += p_event.motion.xrel * g_mouseScaleX;
+		accumY += p_event.motion.yrel * g_mouseScaleY;
+		LONG dx = (LONG) accumX;
+		LONG dy = (LONG) accumY;
+		accumX -= (float) dx;
+		accumY -= (float) dy;
+		if (dx != 0) {
+			g_mouseRing.Push(DIMOFS_X, (DWORD) dx);
 		}
-		if (p_event.motion.yrel != 0.0f) {
-			g_mouseRing.Push(DIMOFS_Y, (DWORD) (LONG) p_event.motion.yrel);
+		if (dy != 0) {
+			g_mouseRing.Push(DIMOFS_Y, (DWORD) dy);
 		}
 		break;
+	}
 	case SDL_EVENT_MOUSE_WHEEL:
 		if (p_event.wheel.y != 0.0f) {
 			g_mouseRing.Push(DIMOFS_Z, (DWORD) (LONG) (p_event.wheel.y * 120.0f));

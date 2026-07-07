@@ -66,6 +66,8 @@ jobs:
               common \
             --exclude \
               LEGORacers/src/app/main.cpp \
+              LEGORacers/emscripten/filesystem.cpp \
+              LEGORacers/emscripten/filesystem.h \
               LEGORacers/src/video/avireader.cpp \
               LEGORacers/src/video/videoplayer.cpp \
               LEGORacers/include/video/avireader.h \
@@ -85,6 +87,7 @@ jobs:
           - { name: 'Linux',      os: 'ubuntu-latest',  generator: 'Ninja' , linux: true }
           - { name: 'MSVC (x64)', os: 'windows-latest', generator: 'Ninja' , msvc: true, vc-arch: 'amd64' }
           - { name: 'macOS',      os: 'macos-latest',   generator: 'Ninja' , brew: true }
+          - { name: 'Emscripten', os: 'ubuntu-latest',  generator: 'Ninja' , emsdk: true, cmake-wrapper: 'emcmake' }
 
     steps:
       - name: Setup vcvars
@@ -112,13 +115,23 @@ jobs:
           brew update
           brew install cmake ninja || true
 
+      - name: Install Emscripten dependencies (apt-get)
+        if: ${{ matrix.emsdk }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+
+      - name: Setup Emscripten
+        if: ${{ matrix.emsdk }}
+        uses: emscripten-core/setup-emsdk@v15
+
       - uses: actions/checkout@v4
         with:
           submodules: recursive
 
       - name: Configure (CMake)
         run: |
-          cmake -S . -B build -G "${{ matrix.generator }}" \
+          ${{ matrix.cmake-wrapper || '' }} cmake -S . -B build -G "${{ matrix.generator }}" \
             -DCMAKE_BUILD_TYPE=Release \
             -DDOWNLOAD_DEPENDENCIES=ON \
             -Werror=dev

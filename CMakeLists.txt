@@ -20,6 +20,9 @@ if (EMSCRIPTEN)
     -sWASMFS=1
     -sEXIT_RUNTIME=1
     -sABORT_ON_WASM_EXCEPTIONS=1
+    # Blocking game loop yields to the browser each frame via asyncify (SDL's
+    # SwapWindow/SDL_Delay call emscripten_sleep).
+    -sASYNCIFY=1
     -gsource-map
   )
   set(SDL_PTHREADS ON CACHE BOOL "Enable SDL pthreads" FORCE)
@@ -129,8 +132,32 @@ list(APPEND GOLDP_SOURCES "${CMAKE_SOURCE_DIR}/GolDP/portable/golsoftwarerendere
 # COM GUID storage is provided by miniwin.
 list(REMOVE_ITEM LEGORACERS_SOURCES "${CMAKE_SOURCE_DIR}/LEGORacers/src/app/guids.cpp")
 
+# GolTextureList::LoadTextures and the g_texture*File globals are defined in BOTH the exe (here,
+# LEGORACERS 0x004146a0) and the dll (GolDP goltexturelist.cpp/golimage.cpp, GOLDP 0x1002b890).
+# On desktop each Win32 binary keeps its own copy; the web's single static module makes them
+# collide. The two LoadTextures bodies are functionally identical (the exe inlines the member
+# writes the dll performs through inline accessors), so drop the exe copy on the web and let
+# goldp's serve both callers. (A cleaner unification into common/ is blocked by the GolDP copy's
+# dependency on the 3D renderer classes.)
+if (EMSCRIPTEN)
+  list(REMOVE_ITEM LEGORACERS_SOURCES "${CMAKE_SOURCE_DIR}/LEGORacers/src/model/goltexturelist.cpp")
+endif()
+
 # GolDP.dll ("Gol" renderer backend), linked directly instead of LoadLibrary'd.
-add_library(goldp ${GOLDP_SOURCES} ${COMMON_SOURCES})
+#
+# common/ is compiled into BOTH goldp and legoracers (with different BUILDING_* defines) so
+# each original Win32 binary is self-contained. On desktop goldp is a separate shared library,
+# so the two common/ copies never clash. On the web everything links into ONE module, so
+# common/ must appear exactly once or wasm-ld reports ~960 duplicate symbols. There it is
+# compiled only into legoracers (with both BUILDING_* defines, see below) and goldp omits it,
+# resolving those symbols at the final link. The GolImport search-path round-trip that assumes
+# two separate globals is a no-op in racers (search paths are only ever populated by that
+# round-trip and start empty), so a single shared common/ is safe.
+if (EMSCRIPTEN)
+  add_library(goldp ${GOLDP_SOURCES})
+else()
+  add_library(goldp ${GOLDP_SOURCES} ${COMMON_SOURCES})
+endif()
 target_compile_definitions(goldp PRIVATE BUILDING_GOL)
 target_include_directories(goldp PRIVATE
   "${PROJECT_SOURCE_DIR}/GolDP/include"
@@ -174,6 +201,23 @@ if (RACERS_BUILD_APP)
     set_property(SOURCE LEGORacers/racers.rc APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/LEGORacers/resources/racers.ico")
   endif()
   set_property(TARGET legoracers PROPERTY OUTPUT_NAME "LEGORacers")
+
+  if (EMSCRIPTEN)
+    # Web build: stream game data (WASMFS fetch) + persist saves (OPFS), emit an HTML shell
+    # (shell.html -- it also maps the URL query string into argv so launch options can be
+    # exercised from the address bar), and define the streamed-data host.
+    target_sources(legoracers PRIVATE LEGORacers/emscripten/filesystem.cpp)
+    # common/ is compiled only here on the web (goldp omits it — see the goldp note). Define
+    # BUILDING_GOL alongside BUILDING_LEGORACERS so the single shared common/ copy contains
+    # every symbol both sides need (SetGolImport + CreateGolImport, GolStream::ClearSearchPaths,
+    # ...). No app/dll source branches on BUILDING_GOL and no common/ class puts a member or
+    # vtable behind it, so class layouts are unchanged.
+    target_compile_definitions(legoracers PRIVATE BUILDING_GOL)
+    target_compile_definitions(legoracers PRIVATE "RACERS_EMSCRIPTEN_HOST=\"${RACERS_EMSCRIPTEN_HOST}\"")
+    set_property(TARGET legoracers PROPERTY SUFFIX ".html")
+    target_link_options(legoracers PRIVATE "SHELL:--shell-file ${CMAKE_SOURCE_DIR}/LEGORacers/emscripten/shell.html")
+    set_property(TARGET legoracers APPEND PROPERTY LINK_DEPENDS "${CMAKE_SOURCE_DIR}/LEGORacers/emscripten/shell.html")
+  endif()
 endif()
 
 find_program(CLANGFORMAT_BIN NAMES clang-format)
@@ -234,6 +278,8 @@ if (CLANG_LIBRARY AND TARGET Python3::Interpreter)
         common
       --exclude
         LEGORacers/src/app/main.cpp
+        LEGORacers/emscripten/filesystem.cpp
+        LEGORacers/emscripten/filesystem.h
         LEGORacers/src/video/avireader.cpp
         LEGORacers/src/video/videoplayer.cpp
         LEGORacers/include/video/avireader.h

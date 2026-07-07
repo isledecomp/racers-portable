@@ -29,6 +29,12 @@
 #include <direct.h>
 #endif
 
+#ifdef __EMSCRIPTEN__
+#include "emscripten/filesystem.h"
+
+#include <emscripten.h>
+#endif
+
 DECOMP_SIZE_ASSERT(CommandLineArgs, 0x84)
 
 // GLOBAL: LEGORACERS 0x004c47e4
@@ -106,6 +112,18 @@ static void DisplayArgumentHelp()
 	SDL_Log("  -novideo -window -horzres <n> -vertres <n>");
 }
 
+#ifdef __EMSCRIPTEN__
+// Stub emscripten's JSEvents.fullscreenEnabled to false so the game can never exit the user's
+// browser fullscreen (it guards every emscripten fullscreen op). Kept in its own function so the
+// EM_ASM's JS braces cannot confuse clang-format's indentation of the caller.
+static void DisableBrowserFullscreenExit()
+{
+	// clang-format off
+	MAIN_THREAD_EM_ASM({JSEvents.fullscreenEnabled = function() { return false; }});
+// clang-format on
+}
+#endif
+
 SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 {
 	// The game thread owns the GL context; without async dispatch, macOS CGL context
@@ -156,6 +174,13 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			continue;
 		}
 		if (SDL_strcmp(argv[i], "--renderer") == 0 && i + 1 < argc) {
+#ifdef __EMSCRIPTEN__
+			// Single renderer on web (WebGL2), nothing to switch to; ignore it (persisting a
+			// desktop backend would just warn on every later launch).
+			SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "--renderer ignored on web (single WebGL2 renderer)");
+			i++;
+			continue;
+#else
 			MiniwinBackendId backend;
 			if (!MiniwinBackendFromName(argv[i + 1], &backend)) {
 				SDL_LogError(
@@ -172,9 +197,14 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			rendererFromCli = true;
 			i++;
 			continue;
+#endif
 		}
 		if (SDL_strcmp(argv[i], "--path") == 0 && i + 1 < argc) {
-#ifdef _WIN32
+#if defined(__EMSCRIPTEN__)
+			// Web data lives at a fixed mount (/racers), resolved by basename regardless of cwd;
+			// nothing to chdir into, so ignore it.
+			SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "--path ignored on web (data streamed from a fixed mount)");
+#elif defined(_WIN32)
 			_chdir(argv[i + 1]);
 #else
 			if (chdir(argv[i + 1]) != 0) {
@@ -191,6 +221,19 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		SDL_strlcat(g_commandLine, argv[i], sizeof(g_commandLine));
 	}
 
+#ifdef __EMSCRIPTEN__
+	// The browser cannot be forced into true fullscreen without a user gesture, and the game
+	// defaults to fullscreen (the intro movies and the display both request it). Always run
+	// windowed on the web so nothing goes fullscreen unprompted; a later Alt+Enter (a user
+	// gesture) can still opt in. -window also makes VideoPlayer's WantsFullscreen() false.
+	if (!SDL_strstr(g_commandLine, "-window")) {
+		if (g_commandLine[0]) {
+			SDL_strlcat(g_commandLine, " ", sizeof(g_commandLine));
+		}
+		SDL_strlcat(g_commandLine, "-window", sizeof(g_commandLine));
+	}
+#endif
+
 	// With no explicit --renderer, honor the renderer chosen in a previous session's
 	// in-game menu (persisted on switch), read before the window is created.
 	if (!rendererFromCli) {
@@ -199,6 +242,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			MiniwinSetBackend(saved);
 		}
 	}
+
+#ifdef __EMSCRIPTEN__
+	// Mount streamed game data (WASMFS fetch) + persistent user data (OPFS) before the game
+	// starts opening files.
+	Racers_SetupWebFilesystem();
+
+	// Keep the game from ever exiting the user's browser fullscreen.
+	DisableBrowserFullscreenExit();
+#endif
 
 	CoInitialize(0);
 
@@ -209,6 +261,21 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	SDL_SetAtomicInt(&g_gameThreadDone, 0);
 	SDL_SetAtomicInt(&g_gameResult, 0);
 
+#ifdef __EMSCRIPTEN__
+	// On the web the game runs on THIS thread — the proxied main thread, which owns the
+	// OffscreenCanvas under PROXY_TO_PTHREAD, so WebGL works. Run() is a blocking loop;
+	// asyncify lets its SDL_GL_SwapWindow/SDL_Delay yield to the browser each frame (present +
+	// event processing), keeping it responsive without a separate game thread.
+	//
+	// The loop returns only when the user quits. Returning into SDL's cooperative EXIT_RUNTIME
+	// teardown does not actually terminate here: PROXY_TO_PTHREAD and the still-running audio
+	// device keep keepRuntimeAlive() true, so the module is left alive but idle (a frozen canvas),
+	// and a browser tab cannot close itself anyway. Force the runtime down instead — this stops
+	// the worker threads and unblocks the exit. Quit is a normal exit, so status 0.
+	GameThread(nullptr);
+	emscripten_force_exit(0);
+	return SDL_APP_SUCCESS; // unreachable: emscripten_force_exit does not return
+#else
 	g_gameThread = SDL_CreateThread(GameThread, "GameThread", nullptr);
 	if (!g_gameThread) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to start game thread: %s", SDL_GetError());
@@ -216,6 +283,7 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	}
 
 	return SDL_APP_CONTINUE;
+#endif
 }
 
 // Synthetic input for automated testing: RACERS_AUTOKEY="ms:scancode[:holdMs],..."
