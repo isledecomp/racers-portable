@@ -19,6 +19,11 @@
 //                control returns.
 //   Menu       — otherwise: the first finger becomes the menu cursor (tap-to-click
 //                through the emulated mouse button + cursor override in Tick).
+//   Disabled   — an owner is claimed but the session has more than one local player
+//                (Versus split screen): touch could only ever drive player one, so
+//                every finger is ignored until the session ends — no steering, no
+//                overlay, no dialog cluster, and no menu-cursor clicks into the
+//                exclusive-mode race input.
 
 #include "renderbackend.h"
 #include "touchoverlay.h"
@@ -70,6 +75,7 @@ enum class TouchMode {
 	Menu,
 	Race,
 	RaceDialog,
+	Disabled,
 };
 
 struct TouchFinger {
@@ -88,6 +94,7 @@ static TouchFinger g_fingers[10];
 static int g_fingerCount = 0;
 
 static void* g_playerOwner = nullptr;
+static bool g_multiPlayerSession = false;
 static unsigned g_prevButtons = 0;
 static bool g_raceGateOpen = false;
 static bool g_dialogPending = false;
@@ -115,7 +122,12 @@ static bool TouchDebugEnabled()
 
 static TouchMode CurrentMode()
 {
-	// Dialog first: the control gate is closed while a dialog is open, but the
+	// Stand-down first: Versus sessions still claim ownership (the claim brackets the
+	// session and its release clears the dialog flag), but no finger may act on it.
+	if (g_playerOwner && g_multiPlayerSession) {
+		return TouchMode::Disabled;
+	}
+	// Dialog next: the control gate is closed while a dialog is open, but the
 	// session (and thus the owner claim) stays alive.
 	if (g_dialogPending) {
 		return TouchMode::RaceDialog;
@@ -406,6 +418,8 @@ static void HandleFingerDown(const SDL_TouchFingerEvent& p_finger)
 	case TouchMode::Menu:
 		BecomeMenuCursor(finger);
 		break;
+	case TouchMode::Disabled:
+		break;
 	}
 }
 
@@ -564,6 +578,11 @@ void MiniwinTouch_NotifyRaceDialog()
 	g_dialogPending = true;
 }
 
+void MiniwinTouch_SetLocalPlayerCount(unsigned p_count)
+{
+	g_multiPlayerSession = p_count > 1;
+}
+
 #ifdef __EMSCRIPTEN__
 // SDL's emscripten backend has no screen-keyboard support, so a hidden <input> in
 // shell.html summons the mobile keyboard. Its own function keeps the EM_ASM JS braces
@@ -717,7 +736,7 @@ bool MiniwinTouch_GetOverlay(MiniwinTouchOverlayState* p_state, int p_drawableW,
 	g_drawableH = p_drawableH;
 
 	TouchMode mode = CurrentMode();
-	if (mode == TouchMode::Menu) {
+	if (mode == TouchMode::Menu || mode == TouchMode::Disabled) {
 		return false;
 	}
 

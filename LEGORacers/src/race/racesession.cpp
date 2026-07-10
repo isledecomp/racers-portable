@@ -1500,6 +1500,10 @@ void RaceSession::InitializeInput()
 		playerCount = session->m_context->m_playerCount;
 	}
 
+	// [library:input] Touch stands down for the whole session when it has more than
+	// one local player (Versus split screen — touch could only drive player one).
+	MiniwinTouch_SetLocalPlayerCount(playerCount);
+
 	if (playerCount > 0) {
 		PlayerControls* controls = session->m_playerControls;
 		Racer** racer = session->m_raceState.m_playerRacers;
