@@ -236,7 +236,12 @@ void PlayerControls::UpdateThrottle()
 	LegoFloat reverseValue = 0.0f;
 	DirectInputDevice* source;
 
-	m_input.GetBinding(&source, 2);
+	// [library:input] Read the throttle axis from the steer slot's device (always the
+	// gamepad on a joystick binding), not the throttle slot's: rebinding a button that
+	// collides with the hidden accel/brake defaults makes the game refill slot 2 with a
+	// keyboard event (entry 0) or nothing, and the original slot-2 read would then poll
+	// an axis-less device and stick throttle would silently die.
+	m_input.GetBinding(&source, 0);
 	if (m_input.m_analogThrottle) {
 		LegoFloat analogValue = -source->GetAxisValue(2);
 		if (analogValue < 0.0f) {
@@ -531,10 +536,14 @@ LegoS32 PlayerControls::DetectAnalogDevice()
 
 	// [library:input] The original only trusted its SideWinder whitelist with an
 	// analog Y axis; every SDL gamepad has one. Enable analog throttle (stick
-	// forward/back in UpdateThrottle) whenever the throttle slot reads a joystick,
-	// so one thumbstick drives steering and speed together.
+	// forward/back in UpdateThrottle) whenever the steer slot reads a joystick, so
+	// one thumbstick drives steering and speed together. The steer slot is the
+	// anchor because the throttle slot's device is not stable: rebinding a button
+	// that collides with the hidden accel/brake defaults refills slot 2 with a
+	// keyboard event (entry 0's fallback) or clears it, which must not turn the
+	// stick throttle off.
 	DirectInputDevice* throttleSource;
-	m_input.GetBinding(&throttleSource, 2);
+	m_input.GetBinding(&throttleSource, 0);
 	if (throttleSource && throttleSource->GetDeviceType() == 4) {
 		m_input.m_analogThrottle = TRUE;
 	}
