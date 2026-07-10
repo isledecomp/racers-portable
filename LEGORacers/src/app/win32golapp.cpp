@@ -437,11 +437,12 @@ void Win32GolApp::UpdateMousePosition()
 			// position every tick would zap the cursor to the origin after each finger
 			// lift — and drag menu focus off the name-entry field, dismissing the
 			// on-screen keyboard. The first poll only primes the comparison.
-			static POINT lastCursorPos;
-			static bool lastCursorPosValid = false;
-			bool cursorMoved = lastCursorPosValid && (cursorPos.x != lastCursorPos.x || cursorPos.y != lastCursorPos.y);
-			lastCursorPos = cursorPos;
-			lastCursorPosValid = true;
+			static POINT g_lastCursorPos;
+			static bool g_lastCursorPosValid = false;
+			bool cursorMoved =
+				g_lastCursorPosValid && (cursorPos.x != g_lastCursorPos.x || cursorPos.y != g_lastCursorPos.y);
+			g_lastCursorPos = cursorPos;
+			g_lastCursorPosValid = true;
 			if (cursorMoved) {
 				cursorPos.x -= topLeft.x;
 				cursorPos.y -= topLeft.y;
