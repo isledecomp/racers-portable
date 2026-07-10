@@ -257,13 +257,19 @@ void DirectInputDevice::SetBufferSize(undefined4 p_bufferSize)
 // FUNCTION: LEGORACERS 0x0044ffc0
 const wchar_t* DirectInputDevice::GetControlName(undefined4 p_arg)
 {
+	// [library:input] Names are stored in 16-bit units (see InputDevice::StoreString),
+	// so index the buffer in the same units. Axis-button events carry the axis index
+	// doubled in their low bits while the name table is indexed per axis — the
+	// original only ever displayed axis X (event 0), where the difference is
+	// invisible; the shift makes axis Y (the analog throttle label) resolve too.
+	const LegoU16* names = (const LegoU16*) m_stringBuffer;
 	switch (GetKeySource(p_arg)) {
 	case c_sourceKeyboard:
 	case c_sourceMouse:
 	case c_sourceJoystickButton:
-		return &m_stringBuffer[m_buttonNameIndices[LOWORD(p_arg)]];
+		return (const wchar_t*) &names[m_buttonNameIndices[LOWORD(p_arg)]];
 	case c_sourceJoystickAxisButton:
-		return &m_stringBuffer[m_axisNameIndices[p_arg & 0xfffe]];
+		return (const wchar_t*) &names[m_axisNameIndices[(p_arg & 0xfffe) >> 1]];
 	default:
 		return NULL;
 	}

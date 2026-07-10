@@ -19,12 +19,14 @@ add_library(miniwin STATIC
 
   # Render backend selection/dispatch (always compiled)
   src/d3d/backends/backends.cpp
+  src/d3d/backends/overlay.cpp
 
   # DirectSound
   src/dsound/dsound.cpp
 
   # DirectInput
   src/dinput/dinput.cpp
+  src/dinput/touch.cpp
 )
 
 # Render backends are selected at build time per platform, mirroring isle-portable:

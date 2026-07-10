@@ -290,6 +290,11 @@ MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, 
 	return g_backend;
 }
 
+MiniwinRenderBackend* MiniwinBackend_Get()
+{
+	return g_backend;
+}
+
 void MiniwinBackend_Shutdown()
 {
 	delete g_backend;

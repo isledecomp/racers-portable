@@ -92,7 +92,7 @@ endif()
 # --- SDL3 ---
 if (DOWNLOAD_DEPENDENCIES)
   set(RACERS_SDL3_GIT_REPO "https://github.com/libsdl-org/SDL.git" CACHE STRING "Git repository for SDL3")
-  set(RACERS_SDL3_GIT_TAG "release-3.4.8" CACHE STRING "Git tag for SDL3")
+  set(RACERS_SDL3_GIT_TAG "release-3.4.12" CACHE STRING "Git tag for SDL3")
   set(SDL_TEST_LIBRARY OFF)
   set(SDL_TESTS OFF)
   set(SDL_EXAMPLES OFF)

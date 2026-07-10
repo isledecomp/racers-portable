@@ -284,6 +284,21 @@ void MiniwinInput_SetMouseScale(float p_scaleX, float p_scaleY)
 	g_mouseScaleY = p_scaleY;
 }
 
+void MiniwinInput_InjectMouseButton(bool p_down)
+{
+	g_mouseRing.Push(DIMOFS_BUTTON0, p_down ? 0x80 : 0x00);
+}
+
+void MiniwinInput_InjectMouseMotion(long p_dx, long p_dy)
+{
+	if (p_dx != 0) {
+		g_mouseRing.Push(DIMOFS_X, (DWORD) (LONG) p_dx);
+	}
+	if (p_dy != 0) {
+		g_mouseRing.Push(DIMOFS_Y, (DWORD) (LONG) p_dy);
+	}
+}
+
 void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 {
 	switch (p_event.type) {

@@ -61,12 +61,34 @@ public:
 	virtual void EndScene() = 0;
 	virtual void Present() = 0;
 
+	// Draws alpha-blended, depth-independent, untextured triangles in drawable-pixel
+	// space (top-left origin) onto the final presented image — on top of the
+	// letterboxed scene, black bars included. Color comes from the vertex diffuse.
+	// Only valid while Present runs (the touch overlay calls it via
+	// MiniwinOverlay_Emit between the scene composite and the swap/submit).
+	virtual void DrawOverlay(
+		const D3DTLVERTEX* p_vertices,
+		Uint32 p_vertexCount,
+		const Uint16* p_indices,
+		Uint32 p_indexCount
+	) = 0;
+
 	// Reads the current backbuffer into an SDL_Surface (caller owns it).
 	virtual SDL_Surface* ReadBackbuffer() = 0;
 
 	// The logical render size the game targets (e.g. 640x480).
 	int m_width = 640;
 	int m_height = 480;
+
+	// Present-time drawable geometry: the full drawable size and the letterboxed rect
+	// the scene is composited into, in drawable pixels. Refreshed by each backend
+	// during Present; consumed by the touch overlay and menu-cursor transform.
+	int m_drawableW = 0;
+	int m_drawableH = 0;
+	int m_vpX = 0;
+	int m_vpY = 0;
+	int m_vpW = 0;
+	int m_vpH = 0;
 };
 
 // Cross-object draw statistics (RACERS_GL_STATS).
@@ -80,6 +102,10 @@ extern Uint32 g_miniwinStatSetTexture;
 // size and only take effect on creation. Returns nullptr if the backend fails to
 // initialize. Owned by the backend layer; released by MiniwinBackend_Shutdown().
 MiniwinRenderBackend* MiniwinBackend_Acquire(SDL_Window* p_window, int p_width, int p_height);
+
+// The live shared backend (null before the first Acquire). Read-only peek for the
+// touch layer's menu-cursor transform; ownership stays with the backend layer.
+MiniwinRenderBackend* MiniwinBackend_Get();
 
 // MiniwinBackend_PrepareWindowFlags / _PresentVideoFrame / _Shutdown and the backend
 // selection config are declared in <miniwin/miniwinapp.h>.

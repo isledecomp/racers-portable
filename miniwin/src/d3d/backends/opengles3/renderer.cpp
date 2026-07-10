@@ -6,6 +6,7 @@
 #include "backends.h"
 #include "es3loader.h"
 #include "miniwin.h"
+#include "overlay.h"
 #include "renderbackend.h"
 
 #include <miniwin/miniwinapp.h>
@@ -118,6 +119,12 @@ public:
 	) override;
 	void EndScene() override;
 	void Present() override;
+	void DrawOverlay(
+		const D3DTLVERTEX* p_vertices,
+		Uint32 p_vertexCount,
+		const Uint16* p_indices,
+		Uint32 p_indexCount
+	) override;
 	SDL_Surface* ReadBackbuffer() override;
 
 private:
@@ -141,11 +148,8 @@ private:
 	GLint m_uAlphaFunc = -1;
 	GLint m_uColorKey = -1;
 
-	// Drawable-space viewport with the logical aspect ratio letterboxed in.
-	int m_vpX = 0;
-	int m_vpY = 0;
-	int m_vpW = 0;
-	int m_vpH = 0;
+	// m_vpX/Y/W/H (the letterboxed drawable-space viewport) and m_drawableW/H live in
+	// the base class, refreshed by UpdateViewport at the top of every Present.
 	int m_borderClearFrames = 0;
 
 	// Offscreen target for MINIWIN_RESOLUTION_ORIGINAL: the scene rasterizes at the
@@ -376,6 +380,8 @@ void MiniwinGles3Backend::UpdateViewport()
 	if (dw <= 0 || dh <= 0 || m_width <= 0 || m_height <= 0) {
 		return;
 	}
+	m_drawableW = dw;
+	m_drawableH = dh;
 
 	int vpW = dw;
 	int vpH = dh;
@@ -901,6 +907,9 @@ void MiniwinGles3Backend::Present()
 		);
 	}
 
+	// Touch overlay on top of the composited frame (letterbox bars included).
+	MiniwinOverlay_Emit(this);
+
 	{
 		MiniwinSlowOpLog slowLog("SwapWindow", "");
 		// On the web (asyncify), SDL_GL_SwapWindow yields to the browser via emscripten_sleep,
@@ -909,6 +918,48 @@ void MiniwinGles3Backend::Present()
 	}
 
 	gl.glBindFramebuffer(GL_FRAMEBUFFER, m_sceneFbo);
+}
+
+void MiniwinGles3Backend::DrawOverlay(
+	const D3DTLVERTEX* p_vertices,
+	Uint32 p_vertexCount,
+	const Uint16* p_indices,
+	Uint32 p_indexCount
+)
+{
+	if (!p_vertexCount || !p_indexCount || m_drawableW <= 0 || m_drawableH <= 0) {
+		return;
+	}
+
+	// Draw straight into the default framebuffer at full drawable size, on top of the
+	// letterboxed scene blit. Depth/blend/cull are reasserted per draw everywhere else
+	// (ApplyState); glViewport and the uViewport uniform are put back at the end (the
+	// scene FBO can be smaller than the drawable under --resolution original, and the
+	// next frame's scene draws run before Present's UpdateViewport).
+	gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	gl.glViewport(0, 0, m_drawableW, m_drawableH);
+	gl.glUseProgram(m_program);
+	gl.glBindVertexArray(m_vao);
+	gl.glUniform2f(m_uViewport, (GLfloat) m_drawableW, (GLfloat) m_drawableH);
+	gl.glDisable(GL_DEPTH_TEST);
+	gl.glDepthMask(GL_FALSE);
+	gl.glEnable(GL_BLEND);
+	gl.glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	gl.glDisable(GL_CULL_FACE);
+	gl.glUniform1i(m_uColorOp, 2); // diffuse only — the shader never samples
+	gl.glUniform1i(m_uAlphaOp, 2);
+	gl.glUniform1i(m_uSpecular, 0);
+	gl.glUniform1i(m_uAlphaFunc, 0);
+	gl.glUniform1i(m_uColorKey, 0);
+
+	gl.glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+	gl.glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr) (p_vertexCount * sizeof(D3DTLVERTEX)), p_vertices, GL_STREAM_DRAW);
+	gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+	gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, (GLsizeiptr) (p_indexCount * sizeof(Uint16)), p_indices, GL_STREAM_DRAW);
+	gl.glDrawElements(GL_TRIANGLES, (GLsizei) p_indexCount, GL_UNSIGNED_SHORT, nullptr);
+
+	gl.glUniform2f(m_uViewport, (GLfloat) m_width, (GLfloat) m_height);
+	gl.glViewport(0, 0, m_sceneFboW, m_sceneFboH);
 }
 
 SDL_Surface* MiniwinGles3Backend::ReadBackbuffer()

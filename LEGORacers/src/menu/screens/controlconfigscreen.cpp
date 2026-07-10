@@ -256,6 +256,13 @@ void ControlConfigScreen::RefreshEventTexts()
 		if (!(m_eventButtons[i].GetStateFlags() & MenuIcon::c_flagFocused)) {
 			LegoU32 event = state.GetInputEvent(m_playerIndex, m_bindingIndices[m_selectedDevice], i);
 
+			// [library:input] Joystick accelerate/brake are analog (stick Y, see
+			// PlayerControls::DetectAnalogDevice) like the steering pair: show the
+			// axis name even over a leftover button binding.
+			if (i >= 2 && i < 4 && m_devices[m_selectedDevice]->GetDeviceType() == 4) {
+				event = 0;
+			}
+
 			if (event) {
 				InputDevice* device;
 				if ((event & InputDevice::c_sourceMask) == InputDevice::c_sourceKeyboard) {
@@ -278,6 +285,18 @@ void ControlConfigScreen::RefreshEventTexts()
 					m_eventTexts[i].ToUpperCase();
 				}
 			}
+			// [library:input] Accelerate/brake rows: the stick's Y axis (axis-button
+			// event 2) drives them on gamepads.
+			else if (i < 4) {
+				InputDevice* device = m_devices[m_selectedDevice];
+				if (device->GetDeviceType() == 4 && (device->GetAxisMask() & 2)) {
+					m_eventTexts[i].CopyFromBufSelection(
+						(undefined2*) device->GetControlName(InputDevice::c_sourceJoystickAxisButton + 2),
+						0
+					);
+					m_eventTexts[i].ToUpperCase();
+				}
+			}
 		}
 
 		m_eventButtons[i].SetText(&m_eventTexts[i]);
@@ -292,10 +311,17 @@ LegoBool32 ControlConfigScreen::Update(undefined4 p_source)
 	if (m_devices[m_selectedDevice]->GetDeviceType() == 3) {
 		m_eventButtons[0].Enable(0);
 		m_eventButtons[1].Enable(0);
+		m_eventButtons[2].Enable(0);
+		m_eventButtons[3].Enable(0);
 	}
 	else {
 		m_eventButtons[0].Disable(0);
 		m_eventButtons[1].Disable(0);
+		// [library:input] Accelerate/brake ride the stick's Y axis on gamepads (see
+		// PlayerControls::DetectAnalogDevice), matching how steering rides X — grey
+		// their rows out like the steering pair.
+		m_eventButtons[2].Disable(0);
+		m_eventButtons[3].Disable(0);
 	}
 
 	return MenuGameScreen::Update(p_source);

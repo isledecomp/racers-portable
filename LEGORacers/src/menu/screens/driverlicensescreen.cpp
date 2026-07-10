@@ -8,6 +8,7 @@
 #include "surface/color.h"
 
 #include <ctype.h>
+#include <miniwin/touch.h>
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(DriverLicenseScreen, 0x23bc)
@@ -332,6 +333,10 @@ void DriverLicenseScreen::OnIconDeselected(MenuIcon* p_source)
 {
 	if (p_source == &m_nameEntry) {
 		m_nameFieldFrame.ClearFlags(2);
+		// [library:input] Touch: name editing ended. The Enter commit clears the
+		// selection through ClearSelected without the widget's virtual Deselect,
+		// so the on-screen keyboard is dismissed from this notification instead.
+		MiniwinTouch_TextFieldFocus(false);
 	}
 }
 
@@ -340,6 +345,9 @@ void DriverLicenseScreen::OnIconSelected(MenuIcon* p_source)
 {
 	if (p_source == &m_nameEntry) {
 		m_nameFieldFrame.SetFlags(2);
+		// [library:input] Touch: name editing (re)started — summon the on-screen
+		// keyboard (covers selection paths that bypass the widget's virtual Select).
+		MiniwinTouch_TextFieldFocus(true);
 	}
 }
 

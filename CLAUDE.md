@@ -22,6 +22,8 @@ cmake --build build
 ## Testing aids (environment variables)
 
 - `RACERS_AUTOKEY="ms:scancode[:holdMs],..."` — scripted key injection (SDL scancodes; Alt/Ctrl/Shift chord state is tracked).
+- `RACERS_TOUCH=1` — mouse-as-finger testing: SDL mouse→touch synthesis feeds the touch layer so drag-steering/buttons/taps work without a touchscreen (touch-synthesized menu clicks are suppressed for these fingers to avoid doubling the real mouse).
+- `RACERS_AUTOTOUCH="ms:d|m|u:nx:ny[:finger],..."` — scripted touch injection (normalized window coords; hold taps ≥50 ms so the per-frame edge polling sees them; `finger` defaults to 1, so a concurrent second finger needs an explicit `:2`).
 - `RACERS_DUMP_EVERY=ms:prefix` / `RACERS_DUMP_FRAME=N:path` — periodic / single-frame screenshots.
 - `RACERS_WATCHDOG=<ms>` — reports game-thread stalls with the miniwin phase they occurred in; slow operations (>30 ms) log themselves.
 - `RACERS_GL_STATS=1` — per-100-frame draw stats and frame-time min/avg/max (run with `SDL_LOGGING="*=info"`).
@@ -30,3 +32,5 @@ cmake --build build
 ## Player-facing options
 
 `--path <dir>`, `--language <index>`, `--scale letterbox|stretch`, `--resolution native|original`, plus the original arguments (`-window`, `-novideo`, …). No `-window` means fullscreen. Alt+Enter toggles fullscreen.
+
+Touch (touchscreens/web): always-on additive controls — left-half drag steers (thumb held = throttle), drawn buttons for power-up/slide/brake + pause/look-back, tap-to-click menus, pause-dialog ▲✓▼ cluster, OSK name entry. Layer lives in `miniwin/src/dinput/touch.cpp` + `miniwin/src/d3d/backends/overlay.cpp`; game-side hooks are tagged `// [library:input]` (playercontrols.cpp, racesession.cpp, menutextfield.cpp, driverlicensescreen.cpp).

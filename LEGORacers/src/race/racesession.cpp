@@ -35,6 +35,7 @@
 #include "world/golworlddatabase.h"
 
 #include <memory.h>
+#include <miniwin/touch.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
@@ -2629,6 +2630,11 @@ void RaceSession::TakeScreenshot()
 // FUNCTION: LEGORACERS 0x00436010
 void RaceSession::OpenPauseDialog()
 {
+	// [library:input] Touch overlay: swap to the dialog-navigation button cluster
+	// (this is the single choke point for ESC pause, the time-race end dialog and
+	// nested confirms).
+	MiniwinTouch_NotifyRaceDialog();
+
 	LegoU32 playerIndex = 0;
 	if (m_context->m_playerCount > 0) {
 		PlayerControls* controls = m_playerControls;

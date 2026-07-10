@@ -16,6 +16,7 @@
 
 #include <SDL3/SDL.h>
 #include <miniwin/miniwinapp.h>
+#include <miniwin/touch.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
@@ -430,11 +431,24 @@ void Win32GolApp::UpdateMousePosition()
 			// raw window space would scale drag input by the fill factor.
 			MiniwinInput_SetMouseScale(1.0f / xScale, 1.0f / yScale);
 #endif
-			cursorPos.x -= topLeft.x;
-			cursorPos.y -= topLeft.y;
-			cursorPos.x = static_cast<LONG>(static_cast<LegoFloat>(cursorPos.x) / xScale);
-			cursorPos.y = static_cast<LONG>(static_cast<LegoFloat>(cursorPos.y) / yScale);
-			m_eventHandler->OnCursorMoved(cursorPos.x, cursorPos.y);
+			// [library:input] Assert the polled OS cursor only when it actually moved —
+			// the original's updates came from mouse-move messages. On touch-only devices
+			// (mobile browsers) the SDL mouse never moves, so re-asserting its stale
+			// position every tick would zap the cursor to the origin after each finger
+			// lift — and drag menu focus off the name-entry field, dismissing the
+			// on-screen keyboard. The first poll only primes the comparison.
+			static POINT lastCursorPos;
+			static bool lastCursorPosValid = false;
+			bool cursorMoved = lastCursorPosValid && (cursorPos.x != lastCursorPos.x || cursorPos.y != lastCursorPos.y);
+			lastCursorPos = cursorPos;
+			lastCursorPosValid = true;
+			if (cursorMoved) {
+				cursorPos.x -= topLeft.x;
+				cursorPos.y -= topLeft.y;
+				cursorPos.x = static_cast<LONG>(static_cast<LegoFloat>(cursorPos.x) / xScale);
+				cursorPos.y = static_cast<LONG>(static_cast<LegoFloat>(cursorPos.y) / yScale);
+				m_eventHandler->OnCursorMoved(cursorPos.x, cursorPos.y);
+			}
 		}
 	}
 }
@@ -443,7 +457,12 @@ void Win32GolApp::UpdateMousePosition()
 LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 {
 	m_eventHandler = p_eventHandler;
-	UpdateMousePosition();
+	// While a finger owns the menu cursor, the real-mouse re-assert would yank the
+	// cursor away between a tap's press and release; the finger position is applied
+	// after the drain below instead.
+	if (!MiniwinTouch_MenuCursorActive()) {
+		UpdateMousePosition();
+	}
 
 	// Replaces the PeekMessage pump + AppWndProc: SDL events (forwarded from the main
 	// thread, or pumped inline in MiniwinApp_PollEvent on the web) are dispatched to the
@@ -464,6 +483,7 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 			}
 
 			MiniwinInput_HandleEvent(event);
+			MiniwinTouch_HandleEvent(event);
 
 			switch (event.type) {
 			case SDL_EVENT_QUIT:
@@ -491,7 +511,12 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 					else if (key == SDLK_ESCAPE) {
 						ch = 0x1b;
 					}
-					else if (key >= 32 && key < 127) {
+					else if (key >= 32 && key < 127 && !MiniwinTouch_TextInputActive()) {
+						// While SDL text input is active (touch on-screen keyboard),
+						// printable characters arrive as SDL_EVENT_TEXT_INPUT below;
+						// suppressing this synthesis keeps web physical keyboards from
+						// double-typing. Return/backspace/escape never ride text input
+						// and stay on this path.
 						ch = (undefined4) key;
 						if (event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS)) {
 							if (key >= 'a' && key <= 'z') {
@@ -511,6 +536,20 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 					if (ch) {
 						m_eventHandler->OnChar(ch);
 						m_eventHandler->VTable0x20(ch);
+					}
+				}
+				break;
+			case SDL_EVENT_TEXT_INPUT:
+				// Touch on-screen keyboard characters (SDL text input is started only
+				// on touch-capable devices — see MiniwinTouch_TextFieldFocus). The
+				// game's text fields take simple characters, so ASCII only.
+				if (m_eventHandler && MiniwinTouch_TextInputActive() && event.text.text) {
+					for (const char* text = event.text.text; *text; text++) {
+						unsigned char ch = (unsigned char) *text;
+						if (ch >= 32 && ch < 127) {
+							m_eventHandler->OnChar((undefined4) ch);
+							m_eventHandler->VTable0x20((undefined4) ch);
+						}
 					}
 				}
 				break;
@@ -559,8 +598,27 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 	// current mouse with no one-frame lag; the read at the top of Tick is stale by exactly the
 	// events just processed. (Desktop compensates with the DirectInput relative accumulation,
 	// which the web disables because the browser provides an absolute cursor.)
-	UpdateMousePosition();
+	if (!MiniwinTouch_MenuCursorActive()) {
+		UpdateMousePosition();
+	}
 #endif
+
+	// Touch tap-to-click: assert the finger's cursor position after the drain so the
+	// click already sitting in the DirectInput ring dispatches under the finger when
+	// the menu processes this frame's input.
+	if (m_eventHandler && m_golDrawState) {
+		long touchCursorX;
+		long touchCursorY;
+		if (MiniwinTouch_GetMenuCursor(
+				&touchCursorX,
+				&touchCursorY,
+				(int) m_golDrawState->m_width,
+				(int) m_golDrawState->m_height
+			)) {
+			m_eventHandler->OnCursorInside();
+			m_eventHandler->OnCursorMoved(touchCursorX, touchCursorY);
+		}
+	}
 
 	DWORD time = timeGetTime();
 	m_frameDeltaMs = time - m_lastFrameTimeMs;

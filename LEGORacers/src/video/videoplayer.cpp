@@ -14,6 +14,7 @@
 #include <SDL3/SDL.h>
 #include <indeo5dec.h>
 #include <miniwin/miniwinapp.h>
+#include <miniwin/touch.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -262,7 +263,13 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 			}
 			else if (
 				p_abortableOnKey && ((event.type == SDL_EVENT_KEY_DOWN && !IsModifierKey(event.key.key)) ||
-									 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
+									 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+									 // Touch: SDL's touch->mouse synthesis is disabled, so taps skip movies
+									 // via their finger events (direct touchscreens only — a trackpad rest
+									 // must not skip).
+									 (event.type == SDL_EVENT_FINGER_DOWN &&
+									  (SDL_GetTouchDeviceType(event.tfinger.touchID) == SDL_TOUCH_DEVICE_DIRECT ||
+									   event.tfinger.touchID == MINIWIN_TOUCH_TEST_DEVICE)))
 			) {
 				aborted = true;
 			}

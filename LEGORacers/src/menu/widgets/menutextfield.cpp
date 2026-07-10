@@ -5,6 +5,7 @@
 #include "input/inputeventqueue.h"
 #include "menu/screens/menuscreeninterface.h"
 
+#include <miniwin/touch.h>
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(MenuTextField, 0x23c)
@@ -97,6 +98,9 @@ void MenuTextField::SetText(GolString* p_string)
 void MenuTextField::Select(undefined4 p_flags)
 {
 	SetFocus();
+	// [library:input] Touch: request the platform on-screen keyboard while editing
+	// (no-op unless a touch device is in use).
+	MiniwinTouch_TextFieldFocus(true);
 	MenuIcon::Select(p_flags);
 }
 
@@ -104,6 +108,8 @@ void MenuTextField::Select(undefined4 p_flags)
 void MenuTextField::Deselect(undefined4 p_flags)
 {
 	ClearFocus();
+	// [library:input] Touch: dismiss the on-screen keyboard.
+	MiniwinTouch_TextFieldFocus(false);
 	MenuIcon::Deselect(p_flags);
 }
 

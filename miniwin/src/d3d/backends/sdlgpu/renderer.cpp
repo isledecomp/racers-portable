@@ -12,6 +12,7 @@
 
 #include "backends.h"
 #include "miniwin.h"
+#include "overlay.h"
 #include "renderbackend.h"
 #include "shaders/generated/miniwin_sdlgpu_shaders.h"
 
@@ -216,11 +217,18 @@ public:
 	) override;
 	void EndScene() override;
 	void Present() override;
+	void DrawOverlay(
+		const D3DTLVERTEX* p_vertices,
+		Uint32 p_vertexCount,
+		const Uint16* p_indices,
+		Uint32 p_indexCount
+	) override;
 	SDL_Surface* ReadBackbuffer() override;
 
 private:
 	SDL_GPUShader* LoadShader(SDL_GPUShaderStage p_stage);
 	SDL_GPUGraphicsPipeline* PipelineFor(const MiniwinRasterState& p_state);
+	SDL_GPUGraphicsPipeline* EnsureOverlayPipeline();
 	SDL_GPUTexture* TextureFor(Uint32 p_id) const;
 	void UploadPixels(SDL_GPUTexture* p_texture, int p_width, int p_height, const void* p_rgba, bool p_mipmaps);
 	SDL_GPUTexture* CreateSolidTexture(Uint32 p_rgba);
@@ -242,17 +250,10 @@ private:
 	int m_sceneW = 0;
 	int m_sceneH = 0;
 
-	// Letterboxed drawable-space rect the scene is blitted into.
-	int m_vpX = 0;
-	int m_vpY = 0;
-	int m_vpW = 0;
-	int m_vpH = 0;
-
-	// The real drawable size, taken from the acquired swapchain — authoritative for the
-	// viewport and scene target. SDL_GetWindowSizeInPixels can report the created window
-	// size (e.g. 640x480) even when the swapchain is fullscreen (e.g. 1920x1080).
-	int m_drawableW = 0;
-	int m_drawableH = 0;
+	// m_vpX/Y/W/H and m_drawableW/H live in the base class. The drawable size is taken
+	// from the acquired swapchain — authoritative for the viewport and scene target;
+	// SDL_GetWindowSizeInPixels can report the created window size (e.g. 640x480) even
+	// when the swapchain is fullscreen (e.g. 1920x1080).
 
 	std::unordered_map<Uint32, SDL_GPUGraphicsPipeline*> m_pipelines;
 	std::unordered_map<Uint32, SDL_GPUTexture*> m_textures;
@@ -276,6 +277,18 @@ private:
 	SDL_GPUCommandBuffer* m_cmdbuf = nullptr;
 	SDL_GPURenderPass* m_pass = nullptr;
 	Uint64 m_frameCounter = 0;
+
+	// Touch overlay: a dedicated pipeline (no depth-stencil target, unlike every cached
+	// scene pipeline) and small dedicated buffers drawn onto the swapchain after the
+	// letterbox blit. m_swapchainTexture is only valid while Present runs.
+	SDL_GPUGraphicsPipeline* m_overlayPipeline = nullptr;
+	SDL_GPUBuffer* m_overlayVertexBuffer = nullptr;
+	Uint32 m_overlayVertexCapacity = 0;
+	SDL_GPUBuffer* m_overlayIndexBuffer = nullptr;
+	Uint32 m_overlayIndexCapacity = 0;
+	SDL_GPUTransferBuffer* m_overlayTransfer = nullptr;
+	Uint32 m_overlayTransferCapacity = 0;
+	SDL_GPUTexture* m_swapchainTexture = nullptr;
 };
 
 MiniwinSdlGpuBackend::~MiniwinSdlGpuBackend()
@@ -313,6 +326,18 @@ MiniwinSdlGpuBackend::~MiniwinSdlGpuBackend()
 	}
 	if (m_indexBuffer) {
 		SDL_ReleaseGPUBuffer(m_device, m_indexBuffer);
+	}
+	if (m_overlayPipeline) {
+		SDL_ReleaseGPUGraphicsPipeline(m_device, m_overlayPipeline);
+	}
+	if (m_overlayVertexBuffer) {
+		SDL_ReleaseGPUBuffer(m_device, m_overlayVertexBuffer);
+	}
+	if (m_overlayIndexBuffer) {
+		SDL_ReleaseGPUBuffer(m_device, m_overlayIndexBuffer);
+	}
+	if (m_overlayTransfer) {
+		SDL_ReleaseGPUTransferBuffer(m_device, m_overlayTransfer);
 	}
 	if (m_vertexShader) {
 		SDL_ReleaseGPUShader(m_device, m_vertexShader);
@@ -940,6 +965,199 @@ void MiniwinSdlGpuBackend::ReplayCommands()
 	m_pass = nullptr;
 }
 
+SDL_GPUGraphicsPipeline* MiniwinSdlGpuBackend::EnsureOverlayPipeline()
+{
+	if (m_overlayPipeline) {
+		return m_overlayPipeline;
+	}
+
+	// Mirrors PipelineFor's vertex layout, but targets the swapchain: alpha blend on,
+	// no culling, and — unlike every cached scene pipeline — no depth-stencil
+	// attachment (the swapchain pass has none, and SDL_GPU validates target
+	// compatibility, so this cannot live in m_pipelines).
+	SDL_GPUVertexBufferDescription bufferDesc = {};
+	bufferDesc.slot = 0;
+	bufferDesc.pitch = sizeof(D3DTLVERTEX);
+	bufferDesc.input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+
+	SDL_GPUVertexAttribute attributes[4] = {};
+	attributes[0].location = 0;
+	attributes[0].buffer_slot = 0;
+	attributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+	attributes[0].offset = offsetof(D3DTLVERTEX, sx);
+	attributes[1].location = 1;
+	attributes[1].buffer_slot = 0;
+	attributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+	attributes[1].offset = offsetof(D3DTLVERTEX, color);
+	attributes[2].location = 2;
+	attributes[2].buffer_slot = 0;
+	attributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM;
+	attributes[2].offset = offsetof(D3DTLVERTEX, specular);
+	attributes[3].location = 3;
+	attributes[3].buffer_slot = 0;
+	attributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+	attributes[3].offset = offsetof(D3DTLVERTEX, tu);
+
+	SDL_GPUColorTargetBlendState blend = {};
+	blend.enable_blend = true;
+	blend.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+	blend.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+	blend.color_blend_op = SDL_GPU_BLENDOP_ADD;
+	blend.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+	blend.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+	blend.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+	blend.color_write_mask =
+		SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G | SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
+
+	SDL_GPUColorTargetDescription colorTarget = {};
+	colorTarget.format = m_colorFormat;
+	colorTarget.blend_state = blend;
+
+	SDL_GPUGraphicsPipelineCreateInfo info = {};
+	info.vertex_shader = m_vertexShader;
+	info.fragment_shader = m_fragmentShader;
+	info.vertex_input_state.vertex_buffer_descriptions = &bufferDesc;
+	info.vertex_input_state.num_vertex_buffers = 1;
+	info.vertex_input_state.vertex_attributes = attributes;
+	info.vertex_input_state.num_vertex_attributes = 4;
+	info.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+	info.rasterizer_state.fill_mode = SDL_GPU_FILLMODE_FILL;
+	info.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_NONE;
+	info.target_info.color_target_descriptions = &colorTarget;
+	info.target_info.num_color_targets = 1;
+	info.target_info.has_depth_stencil_target = false;
+
+	m_overlayPipeline = SDL_CreateGPUGraphicsPipeline(m_device, &info);
+	if (!m_overlayPipeline) {
+		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_CreateGPUGraphicsPipeline (overlay) failed: %s", SDL_GetError());
+	}
+	return m_overlayPipeline;
+}
+
+void MiniwinSdlGpuBackend::DrawOverlay(
+	const D3DTLVERTEX* p_vertices,
+	Uint32 p_vertexCount,
+	const Uint16* p_indices,
+	Uint32 p_indexCount
+)
+{
+	if (!m_cmdbuf || !m_swapchainTexture || !p_vertexCount || !p_indexCount) {
+		return;
+	}
+	SDL_GPUGraphicsPipeline* pipeline = EnsureOverlayPipeline();
+	if (!pipeline) {
+		return;
+	}
+
+	Uint32 vertexBytes = p_vertexCount * (Uint32) sizeof(D3DTLVERTEX);
+	Uint32 indexBytes = p_indexCount * (Uint32) sizeof(Uint16);
+	if (vertexBytes > m_overlayVertexCapacity) {
+		if (m_overlayVertexBuffer) {
+			SDL_ReleaseGPUBuffer(m_device, m_overlayVertexBuffer);
+		}
+		SDL_GPUBufferCreateInfo info = {};
+		info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+		info.size = vertexBytes;
+		m_overlayVertexBuffer = SDL_CreateGPUBuffer(m_device, &info);
+		m_overlayVertexCapacity = vertexBytes;
+	}
+	if (indexBytes > m_overlayIndexCapacity) {
+		if (m_overlayIndexBuffer) {
+			SDL_ReleaseGPUBuffer(m_device, m_overlayIndexBuffer);
+		}
+		SDL_GPUBufferCreateInfo info = {};
+		info.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+		info.size = indexBytes;
+		m_overlayIndexBuffer = SDL_CreateGPUBuffer(m_device, &info);
+		m_overlayIndexCapacity = indexBytes;
+	}
+	Uint32 total = vertexBytes + indexBytes;
+	if (total > m_overlayTransferCapacity) {
+		if (m_overlayTransfer) {
+			SDL_ReleaseGPUTransferBuffer(m_device, m_overlayTransfer);
+		}
+		SDL_GPUTransferBufferCreateInfo info = {};
+		info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+		info.size = total;
+		m_overlayTransfer = SDL_CreateGPUTransferBuffer(m_device, &info);
+		m_overlayTransferCapacity = total;
+	}
+	if (!m_overlayVertexBuffer || !m_overlayIndexBuffer || !m_overlayTransfer) {
+		return;
+	}
+
+	// The previous frame may still be reading these buffers; cycle everything.
+	Uint8* mapped = (Uint8*) SDL_MapGPUTransferBuffer(m_device, m_overlayTransfer, true);
+	if (!mapped) {
+		return;
+	}
+	SDL_memcpy(mapped, p_vertices, vertexBytes);
+	SDL_memcpy(mapped + vertexBytes, p_indices, indexBytes);
+	SDL_UnmapGPUTransferBuffer(m_device, m_overlayTransfer);
+
+	// Legal here: the blit's implicit pass is closed and no render pass is open.
+	SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(m_cmdbuf);
+	SDL_GPUTransferBufferLocation source = {};
+	source.transfer_buffer = m_overlayTransfer;
+	source.offset = 0;
+	SDL_GPUBufferRegion vertexRegion = {};
+	vertexRegion.buffer = m_overlayVertexBuffer;
+	vertexRegion.offset = 0;
+	vertexRegion.size = vertexBytes;
+	SDL_UploadToGPUBuffer(copyPass, &source, &vertexRegion, true);
+	source.offset = vertexBytes;
+	SDL_GPUBufferRegion indexRegion = {};
+	indexRegion.buffer = m_overlayIndexBuffer;
+	indexRegion.offset = 0;
+	indexRegion.size = indexBytes;
+	SDL_UploadToGPUBuffer(copyPass, &source, &indexRegion, true);
+	SDL_EndGPUCopyPass(copyPass);
+
+	SDL_GPUColorTargetInfo colorTarget = {};
+	colorTarget.texture = m_swapchainTexture;
+	colorTarget.load_op = SDL_GPU_LOADOP_LOAD;
+	colorTarget.store_op = SDL_GPU_STOREOP_STORE;
+	SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(m_cmdbuf, &colorTarget, 1, nullptr);
+	if (!pass) {
+		return;
+	}
+
+	SDL_GPUViewport viewport = {};
+	viewport.w = (float) m_drawableW;
+	viewport.h = (float) m_drawableH;
+	viewport.min_depth = 0.0f;
+	viewport.max_depth = 1.0f;
+	SDL_SetGPUViewport(pass, &viewport);
+	SDL_BindGPUGraphicsPipeline(pass, pipeline);
+
+	VertexUniforms vertexUniforms = {};
+	vertexUniforms.m_viewport[0] = (float) m_drawableW;
+	vertexUniforms.m_viewport[1] = (float) m_drawableH;
+	SDL_PushGPUVertexUniformData(m_cmdbuf, 0, &vertexUniforms, sizeof(vertexUniforms));
+
+	FragmentUniforms fragmentUniforms = {};
+	fragmentUniforms.m_colorOp = (Sint32) MiniwinTextureOp::Diffuse;
+	fragmentUniforms.m_alphaOp = (Sint32) MiniwinTextureOp::Diffuse;
+	SDL_PushGPUFragmentUniformData(m_cmdbuf, 0, &fragmentUniforms, sizeof(fragmentUniforms));
+
+	// The shader never samples with Diffuse ops, but the slot needs a valid binding.
+	SDL_GPUTextureSamplerBinding samplerBinding = {};
+	samplerBinding.texture = m_dummyTexture;
+	samplerBinding.sampler = m_samplers[1][0];
+	SDL_BindGPUFragmentSamplers(pass, 0, &samplerBinding, 1);
+
+	SDL_GPUBufferBinding vertexBinding = {};
+	vertexBinding.buffer = m_overlayVertexBuffer;
+	vertexBinding.offset = 0;
+	SDL_BindGPUVertexBuffers(pass, 0, &vertexBinding, 1);
+	SDL_GPUBufferBinding indexBinding = {};
+	indexBinding.buffer = m_overlayIndexBuffer;
+	indexBinding.offset = 0;
+	SDL_BindGPUIndexBuffer(pass, &indexBinding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+	SDL_DrawGPUIndexedPrimitives(pass, p_indexCount, 1, 0, 0, 0);
+	SDL_EndGPURenderPass(pass);
+}
+
 void MiniwinSdlGpuBackend::Present()
 {
 	MiniwinPhaseScope phase(MINIWIN_PHASE_PRESENT);
@@ -983,6 +1201,11 @@ void MiniwinSdlGpuBackend::Present()
 		blit.clear_color = {0.0f, 0.0f, 0.0f, 1.0f};
 		blit.filter = SDL_GPU_FILTER_LINEAR;
 		SDL_BlitGPUTexture(m_cmdbuf, &blit);
+
+		// Touch overlay on top of the composited frame (letterbox bars included).
+		m_swapchainTexture = swapchain;
+		MiniwinOverlay_Emit(this);
+		m_swapchainTexture = nullptr;
 	}
 
 	SDL_SubmitGPUCommandBuffer(m_cmdbuf);

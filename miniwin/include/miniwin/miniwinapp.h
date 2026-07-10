@@ -22,6 +22,16 @@ void MiniwinInput_HandleEvent(const SDL_Event& p_event);
 // renders at a smaller fixed resolution, so unscaled deltas overshoot the cursor.
 void MiniwinInput_SetMouseScale(float p_scaleX, float p_scaleY);
 
+// Presses/releases the emulated left mouse button through the buffered mouse ring
+// (touch tap-to-click; the menus consume it like a real click). Game thread.
+void MiniwinInput_InjectMouseButton(bool p_down);
+
+// Feeds relative mouse deltas through the buffered mouse ring. The touch layer pushes
+// a 1-unit nudge with each finger placement/motion: the menu dispatcher only runs its
+// hover pass (widget focus following the cursor) on frames where the mouse axes are
+// non-zero, and hover is what arms the widget a tap then clicks. Game thread.
+void MiniwinInput_InjectMouseMotion(long p_dx, long p_dy);
+
 // Runs a callable synchronously on the main thread (window management must happen
 // there on some platforms). Safe to call from the main thread itself.
 template <typename F>

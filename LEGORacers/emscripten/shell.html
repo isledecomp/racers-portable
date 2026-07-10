@@ -2,17 +2,26 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>LEGO Racers</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  /* overscroll/user-select: keep touch racing from triggering pull-to-refresh, text
+     selection or the iOS long-press callout (SDL already sets touch-action on its
+     pointer target; the CSS here is the belt-and-braces for every browser). */
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   /* Fill the browser tab; SDL adopts this as the window size and tracks it on resize. */
-  #canvas { display: block; background: #000; outline: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; }
+  #canvas { display: block; background: #000; outline: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; touch-action: none; }
   #status { position: fixed; top: 8px; left: 12px; color: #888; font: 12px system-ui, sans-serif; z-index: 1; }
 </style>
 </head>
 <body>
 <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+<!-- Hidden input that summons the mobile on-screen keyboard for the game's name
+     entry (SDL's emscripten backend has no screen-keyboard support). Focused via
+     Module.racersOskFocus from the touch layer; keystrokes feed back through the
+     exported racers_osk_key. -->
+<input id="osk" type="text" tabindex="-1" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false"
+       style="position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0.01; border: 0; padding: 0; background: transparent; color: transparent; z-index: 2;">
 <div id="status">loading…</div>
 <script>
   var statusEl = document.getElementById('status');
@@ -31,6 +40,57 @@
     onRuntimeInitialized: function () { if (statusEl) statusEl.style.display = 'none'; }
   };
   window.onerror = function (m) { Module.setStatus('error — see console'); };
+
+  // On-screen keyboard plumbing. stopPropagation keeps SDL's window-level key
+  // handlers from double-seeing keystrokes while the hidden input is focused; the
+  // pointerdown retry covers iOS, which only shows the keyboard for a focus() made
+  // inside a user gesture.
+  (function () {
+    var osk = document.getElementById('osk');
+    var oskWanted = false;
+    Module.racersOskFocus = function (on) {
+      oskWanted = !!on;
+      if (on) { osk.value = ''; osk.focus(); } else { osk.blur(); }
+    };
+    window.addEventListener('pointerdown', function (e) {
+      if (!oskWanted || e.target === osk) { return; }
+      // Re-summon even if still focused: the keyboard's own dismiss key hides it
+      // while keeping DOM focus, and focus() alone would not bring it back.
+      if (document.activeElement === osk) { osk.blur(); }
+      osk.focus();
+    }, true);
+    // iOS dismisses the keyboard when a tap completes outside a text input
+    // (touchend -> click -> focus change) — SDL's pointer handlers cannot cancel
+    // that default. Swallow it for canvas taps while the game is editing; event
+    // delivery to SDL is unaffected, and page UI outside the canvas keeps working.
+    window.addEventListener('touchend', function (e) {
+      var canvas = document.getElementById('canvas');
+      if (oskWanted && document.activeElement === osk && canvas && canvas.contains(e.target)) { e.preventDefault(); }
+    }, { passive: false });
+    osk.addEventListener('blur', function () {
+      if (!oskWanted) { return; }
+      // Safety net for stray focus steals (pointercancel, browser chrome).
+      setTimeout(function () { if (oskWanted && document.activeElement !== osk) { osk.focus(); } }, 0);
+    });
+    osk.addEventListener('input', function () {
+      var text = osk.value;
+      osk.value = '';
+      if (!Module._racers_osk_key) { return; }
+      for (var i = 0; i < text.length; i++) {
+        var c = text.charCodeAt(i);
+        if (c >= 32 && c < 127) { Module._racers_osk_key(c); }
+      }
+    });
+    osk.addEventListener('keydown', function (e) {
+      e.stopPropagation();
+      if (e.key === 'Backspace' || e.key === 'Enter') {
+        if (Module._racers_osk_key) { Module._racers_osk_key(e.key === 'Backspace' ? 8 : 13); }
+        e.preventDefault();
+      }
+    });
+    osk.addEventListener('keypress', function (e) { e.stopPropagation(); });
+    osk.addEventListener('keyup', function (e) { e.stopPropagation(); });
+  })();
 </script>
 {{{ SCRIPT }}}
 </body>

@@ -19,6 +19,7 @@
 #include "types.h"
 
 #include <miniwin/miniwinapp.h>
+#include <miniwin/touch.h>
 #include <objbase.h>
 #include <stdlib.h>
 #include <string.h>
@@ -130,6 +131,15 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 	// updates block the swapping thread until the main thread runs, which shows up as
 	// random multi-hundred-ms frame stalls.
 	SDL_SetHint(SDL_HINT_MAC_OPENGL_ASYNC_DISPATCH, "1");
+
+	// Touch is handled explicitly by the miniwin touch layer: SDL must not synthesize
+	// mouse events from fingers (menus get deliberate tap-to-click instead) nor
+	// fingers from the mouse — except under RACERS_TOUCH=1, which turns the desktop
+	// mouse into a test finger so the touch path can be exercised without a
+	// touchscreen.
+	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
+	const char* touchDebug = SDL_getenv("RACERS_TOUCH");
+	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, touchDebug && SDL_atoi(touchDebug) ? "1" : "0");
 
 	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_HAPTIC | SDL_INIT_EVENTS)) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init failed: %s", SDL_GetError());
@@ -389,6 +399,98 @@ static void PumpAutoKeys()
 	}
 }
 
+// Scripted touch injection: RACERS_AUTOTOUCH="ms:verb:nx:ny[:finger],..." with verb
+// d(own)/m(ove)/u(p) and window coordinates normalized to 0..1 — drives the miniwin
+// touch layer end-to-end without a touchscreen (the companion of RACERS_AUTOKEY).
+// Taps must be held across at least one game frame (~50 ms) to register: the race
+// hooks poll edges once per frame.
+static void PumpAutoTouch()
+{
+	static const char* spec = getenv("RACERS_AUTOTOUCH");
+	if (!spec || !spec[0]) {
+		return;
+	}
+
+	struct AutoTouch {
+		Uint64 m_atMs;
+		Uint32 m_type;
+		float m_nx;
+		float m_ny;
+		SDL_FingerID m_fingerId;
+	};
+	static AutoTouch touches[128];
+	static int touchCount = 0;
+	static int cursor = 0;
+	static Uint64 startMs = 0;
+
+	if (!startMs) {
+		startMs = SDL_GetTicks();
+		char buffer[1024];
+		SDL_strlcpy(buffer, spec, sizeof(buffer));
+
+		char* savePtr = nullptr;
+		for (char* entry = SDL_strtok_r(buffer, ",", &savePtr); entry && touchCount < (int) SDL_arraysize(touches);
+			 entry = SDL_strtok_r(nullptr, ",", &savePtr)) {
+			char* fields[5] = {};
+			int fieldCount = 0;
+			char* fieldSave = nullptr;
+			for (char* field = SDL_strtok_r(entry, ":", &fieldSave); field && fieldCount < 5;
+				 field = SDL_strtok_r(nullptr, ":", &fieldSave)) {
+				fields[fieldCount++] = field;
+			}
+			if (fieldCount < 4) {
+				continue;
+			}
+			Uint32 type;
+			switch (fields[1][0]) {
+			case 'd':
+				type = SDL_EVENT_FINGER_DOWN;
+				break;
+			case 'm':
+				type = SDL_EVENT_FINGER_MOTION;
+				break;
+			case 'u':
+				type = SDL_EVENT_FINGER_UP;
+				break;
+			default:
+				continue;
+			}
+			touches[touchCount].m_atMs = (Uint64) SDL_atoi(fields[0]);
+			touches[touchCount].m_type = type;
+			touches[touchCount].m_nx = (float) SDL_atof(fields[2]);
+			touches[touchCount].m_ny = (float) SDL_atof(fields[3]);
+			touches[touchCount].m_fingerId = fieldCount >= 5 ? (SDL_FingerID) SDL_atoi(fields[4]) : 1;
+			touchCount++;
+		}
+	}
+
+	Uint64 elapsed = SDL_GetTicks() - startMs;
+	while (cursor < touchCount && touches[cursor].m_atMs <= elapsed) {
+		SDL_WindowID windowId = 0;
+		int windowCount = 0;
+		SDL_Window** windows = SDL_GetWindows(&windowCount);
+		if (windows && windowCount > 0) {
+			windowId = SDL_GetWindowID(windows[0]);
+		}
+		SDL_free(windows);
+		if (!windowId) {
+			break; // window not up yet; retry next iterate without consuming
+		}
+
+		SDL_Event event;
+		SDL_zero(event);
+		event.type = touches[cursor].m_type;
+		event.tfinger.touchID = MINIWIN_TOUCH_TEST_DEVICE;
+		event.tfinger.fingerID = touches[cursor].m_fingerId;
+		event.tfinger.x = touches[cursor].m_nx;
+		event.tfinger.y = touches[cursor].m_ny;
+		event.tfinger.pressure = 1.0f;
+		event.tfinger.windowID = windowId;
+		MiniwinApp_PushEvent(event);
+		cursor++;
+	}
+}
+
 SDL_AppResult SDL_AppIterate(void* appstate)
 {
 	if (SDL_GetAtomicInt(&g_gameThreadDone)) {
@@ -396,6 +498,7 @@ SDL_AppResult SDL_AppIterate(void* appstate)
 	}
 
 	PumpAutoKeys();
+	PumpAutoTouch();
 	SDL_Delay(1);
 	return SDL_APP_CONTINUE;
 }

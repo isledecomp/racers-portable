@@ -318,21 +318,27 @@ LegoBool32 InputDevice::RemoveDirectionalTrigger(DirectionalTrigger* p_trigger)
 // FUNCTION: LEGORACERS 0x0044be70
 LegoS16 InputDevice::StoreString(const LegoChar* p_str)
 {
-	wchar_t* ptr = m_stringBuffer;
+	// [library:input] Stored control names are consumed as 16-bit characters (the
+	// control-config screen casts GetControlName to the menu string type). wchar_t
+	// was two bytes on the original's Win32 but is four on the ported platforms, so
+	// store explicitly in 16-bit units — otherwise every name reads back as its
+	// first letter.
+	LegoU16* base = (LegoU16*) m_stringBuffer;
+	LegoU16* ptr = base;
 
 	if (m_stringBuffer == NULL) {
 		return -1;
 	}
 
-	while (ptr[0] != L'\0' || ptr[1] != L'\0') {
+	while (ptr[0] != 0 || ptr[1] != 0) {
 		ptr += 1;
 	}
 
-	if (m_stringBuffer != ptr) {
+	if (base != ptr) {
 		ptr += 1;
 	}
 
-	LegoS16 result = ((LegoU16) ((LegoChar*) ptr - (LegoChar*) m_stringBuffer)) / (sizeof(*ptr));
+	LegoS16 result = ((LegoU16) ((LegoChar*) ptr - (LegoChar*) base)) / (sizeof(*ptr));
 
 	while (*p_str != '\0') {
 		*ptr++ = (LegoU8) *p_str++;
