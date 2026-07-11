@@ -2,15 +2,20 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- interactive-widget=resizes-content: shrink the layout viewport (so 100dvh reflows
+     the game above the mobile keyboard) instead of the default resizes-visual, which
+     scrolls the fixed canvas up to reveal the focused name field and leaves a gap. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <title>LEGO Racers</title>
 <style>
   /* overscroll/user-select: keep touch racing from triggering pull-to-refresh, text
      selection or the iOS long-press callout (SDL already sets touch-action on its
      pointer target; the CSS here is the belt-and-braces for every browser). */
   html, body { margin: 0; height: 100%; background: #000; overflow: hidden; overscroll-behavior: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-  /* Fill the browser tab; SDL adopts this as the window size and tracks it on resize. */
-  #canvas { display: block; background: #000; outline: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; touch-action: none; }
+  /* Fill the browser tab; SDL adopts this as the window size and tracks it on resize.
+     100dvh (not 100vh) so the canvas follows the dynamic viewport — it shrinks above
+     the mobile keyboard during name entry instead of being scrolled out of view. */
+  #canvas { display: block; background: #000; outline: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100dvh; touch-action: none; }
   #status { position: fixed; top: 8px; left: 12px; color: #888; font: 12px system-ui, sans-serif; z-index: 1; }
 </style>
 </head>
@@ -21,7 +26,7 @@
      Module.racersOskFocus from the touch layer; keystrokes feed back through the
      exported racers_osk_key. -->
 <input id="osk" type="text" tabindex="-1" autocapitalize="none" autocomplete="off" autocorrect="off" spellcheck="false"
-       style="position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0.01; border: 0; padding: 0; background: transparent; color: transparent; z-index: 2;">
+       style="position: fixed; left: 0; top: 0; width: 1px; height: 1px; opacity: 0.01; border: 0; padding: 0; background: transparent; color: transparent; z-index: 2;">
 <div id="status">loading…</div>
 <script>
   var statusEl = document.getElementById('status');
@@ -41,16 +46,28 @@
   };
   window.onerror = function (m) { Module.setStatus('error — see console'); };
 
-  // On-screen keyboard plumbing. stopPropagation keeps SDL's window-level key
-  // handlers from double-seeing keystrokes while the hidden input is focused; the
-  // pointerdown retry covers iOS, which only shows the keyboard for a focus() made
-  // inside a user gesture.
+  // On-screen keyboard plumbing. Edits are read from the input event's inputType, not
+  // keydown: Android soft keyboards (Chrome + Firefox) never fire a physical Backspace/
+  // letter keydown — they emit input events with an inputType, and only iOS Safari also
+  // sends real keydowns. The field is kept primed with sentinel NBSPs so a Backspace
+  // always has a char to delete and reliably fires its input event; an empty field
+  // swallows it. stopPropagation keeps SDL's window-level key handlers from double-
+  // seeing keystrokes while the hidden input is focused; the pointerdown retry covers
+  // iOS, which only shows the keyboard for a focus() made inside a user gesture.
   (function () {
     var osk = document.getElementById('osk');
     var oskWanted = false;
+    // Sentinel run the caret is parked after (NBSPs: whitespace, so the next keystroke
+    // starts a fresh word, and >127 so they never survive the printable-ASCII filter).
+    // Re-primed after every edit — the field is only ever "sentinel + the char typed".
+    var OSK_PRIME = '\u00a0\u00a0\u00a0\u00a0';
+    function primeOsk() {
+      osk.value = OSK_PRIME;
+      try { osk.setSelectionRange(OSK_PRIME.length, OSK_PRIME.length); } catch (e) { /* not yet focusable */ }
+    }
     Module.racersOskFocus = function (on) {
       oskWanted = !!on;
-      if (on) { osk.value = ''; osk.focus(); } else { osk.blur(); }
+      if (on) { primeOsk(); osk.focus(); } else { osk.blur(); }
     };
     window.addEventListener('pointerdown', function (e) {
       if (!oskWanted || e.target === osk) { return; }
@@ -72,19 +89,38 @@
       // Safety net for stray focus steals (pointercancel, browser chrome).
       setTimeout(function () { if (oskWanted && document.activeElement !== osk) { osk.focus(); } }, 0);
     });
-    osk.addEventListener('input', function () {
-      var text = osk.value;
-      osk.value = '';
-      if (!Module._racers_osk_key) { return; }
-      for (var i = 0; i < text.length; i++) {
-        var c = text.charCodeAt(i);
-        if (c >= 32 && c < 127) { Module._racers_osk_key(c); }
+    osk.addEventListener('input', function (e) {
+      var send = Module._racers_osk_key;
+      var type = e.inputType || '';
+      if (send) {
+        if (type === 'deleteContentBackward' || type === 'deleteWordBackward' ||
+            type === 'deleteSoftLineBackward' || type === 'deleteContentForward') {
+          // Backspace: the only channel Android soft keyboards use for it. The sentinel
+          // guarantees a char to delete, so this reliably fires.
+          send(8);
+        } else if (type !== 'deleteCompositionText') {
+          // Insertion: forward the new printable chars. Prefer the event's data (just
+          // the inserted text); fall back to the field minus the sentinel.
+          var text = e.data;
+          if (text == null) {
+            text = osk.value;
+            if (text.indexOf(OSK_PRIME) === 0) { text = text.slice(OSK_PRIME.length); }
+          }
+          for (var i = 0; i < text.length; i++) {
+            var c = text.charCodeAt(i);
+            if (c >= 32 && c < 127) { send(c); }
+          }
+        }
       }
+      primeOsk(); // re-arm Backspace and drop the char we just forwarded
     });
     osk.addEventListener('keydown', function (e) {
       e.stopPropagation();
-      if (e.key === 'Backspace' || e.key === 'Enter') {
-        if (Module._racers_osk_key) { Module._racers_osk_key(e.key === 'Backspace' ? 8 : 13); }
+      // Return confirms the name. Backspace is intentionally NOT sent here: a physical
+      // Backspace deletes a sentinel char and comes back through the input handler, and
+      // soft keyboards fire no Backspace keydown — sending it here too would double.
+      if (e.key === 'Enter') {
+        if (Module._racers_osk_key) { Module._racers_osk_key(13); }
         e.preventDefault();
       }
     });
