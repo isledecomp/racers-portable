@@ -16,11 +16,12 @@ static VisualStateColor g_singleRaceVisualStates[] = {
 	{{0xff00dfff}},
 	{{0xffb4dce6}},
 	{{0xffdf3d25}},
+	{{0x1f1fdaff}},
 };
 
 // GLOBAL: LEGORACERS 0x004c228c
 static LegoU8 g_singleRaceVisualStateMap[] = {
-	1, 0, 3, 2, 1, 0, 3, 2, 0, 1, 2, 3, 2, 0, 3, 1, 2, 0, 3, 1, 3, 1, 2, 0,
+	1, 0, 3, 2, 1, 0, 3, 2, 0, 1, 2, 3, 2, 0, 3, 1, 2, 0, 3, 1, 3, 1, 2, 0, 4,
 };
 
 // FUNCTION: LEGORACERS 0x00488750
