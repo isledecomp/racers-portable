@@ -37,9 +37,13 @@
 
 // --- Layout tunables (fractions of min(drawableW, drawableH) unless noted) ---
 
-static const float g_steerRadiusFrac = 0.12f; // drag distance for full steering lock
-static const float g_brakeSizeFrac = 0.16f;   // BRAKE, bottom-right anchor
-static const float g_primarySizeFrac = 0.14f; // POWER-UP / SLIDE
+// Steering travel is a fraction of window WIDTH (the horizontal gesture axis) so full
+// lock scales with the display; everything below is a fraction of min(drawableW, drawableH).
+static const float g_steerTravelFrac = 0.16f;   // horizontal drag (fraction of width) for full lock
+static const float g_steerDeadZoneFrac = 0.10f; // center dead zone, rescaled to full (cf. dinput ScaleAxis)
+static const float g_steerRingFrac = 0.12f;     // overlay thumb-well radius (visual only; not the travel)
+static const float g_brakeSizeFrac = 0.16f;     // BRAKE, bottom-right anchor
+static const float g_primarySizeFrac = 0.14f;   // POWER-UP / SLIDE
 static const float g_clusterGapFrac = 0.035f;
 static const float g_clusterMarginFrac = 0.04f;
 static const float g_cornerSizeFrac = 0.10f; // PAUSE / LOOK-BACK
@@ -186,7 +190,10 @@ static void ComputeLayout(TouchLayout& p_layout)
 	float margin = g_clusterMarginFrac * unit;
 	float dialog = g_dialogSizeFrac * unit;
 
-	p_layout.m_steerRadiusPx = g_steerRadiusFrac * unit;
+	// Compact thumb-well for the overlay only (min-based like the buttons, so it stays
+	// small in landscape); the real full-lock travel is g_steerTravelFrac of the width.
+	// The thumb dot maps the steer value onto this ring, filling it as you near full lock.
+	p_layout.m_steerRadiusPx = g_steerRingFrac * unit;
 
 	// The game HUD owns three corners — race position (top-left), lap/time (top-right)
 	// and the minimap (bottom-right) — so the touch controls stay clear of them: the
@@ -517,6 +524,27 @@ void MiniwinTouch_ReleasePlayer(void* p_owner)
 	}
 }
 
+// [library:input] Steer finger drag -> game analog value in [-1, 1] (positive steers
+// left, the negated device axis). Full lock after a horizontal drag of g_steerTravelFrac
+// of the window width (m_nx is width-normalized, so pixel size cancels and the feel
+// scales with the display); the center dead zone is removed and the remainder rescaled
+// to full range, mirroring the gamepad axis dead zone in dinput.cpp's ScaleAxis.
+static float SteerFromFinger(const TouchFinger& finger)
+{
+	float raw = -(finger.m_nx - finger.m_originNX) / g_steerTravelFrac;
+	float mag = raw < 0.0f ? -raw : raw;
+	if (mag <= g_steerDeadZoneFrac) {
+		return 0.0f;
+	}
+	if (g_steerDeadZoneFrac < 1.0f) {
+		mag = (mag - g_steerDeadZoneFrac) / (1.0f - g_steerDeadZoneFrac);
+	}
+	if (mag > 1.0f) {
+		mag = 1.0f;
+	}
+	return raw < 0.0f ? -mag : mag;
+}
+
 bool MiniwinTouch_GetSteer(void* p_owner, float* p_steer)
 {
 	if (!p_owner || p_owner != g_playerOwner || g_drawableW <= 0 || g_drawableH <= 0) {
@@ -527,18 +555,7 @@ bool MiniwinTouch_GetSteer(void* p_owner, float* p_steer)
 		if (finger.m_role != TouchRole::Steer) {
 			continue;
 		}
-		float unit = (float) (g_drawableW < g_drawableH ? g_drawableW : g_drawableH);
-		float radius = g_steerRadiusFrac * unit;
-		float deltaPx = (finger.m_nx - finger.m_originNX) * (float) g_drawableW;
-		// Game analog convention: positive steers left (the negated device axis).
-		float steer = -deltaPx / radius;
-		if (steer > 1.0f) {
-			steer = 1.0f;
-		}
-		else if (steer < -1.0f) {
-			steer = -1.0f;
-		}
-		*p_steer = steer;
+		*p_steer = SteerFromFinger(finger);
 		return true;
 	}
 	return false;
@@ -760,17 +777,13 @@ bool MiniwinTouch_GetOverlay(MiniwinTouchOverlayState* p_state, int p_drawableW,
 			}
 			float originX = finger.m_originNX * (float) g_drawableW;
 			float originY = finger.m_originNY * (float) g_drawableH;
-			float deltaPx = (finger.m_nx - finger.m_originNX) * (float) g_drawableW;
-			if (deltaPx > layout.m_steerRadiusPx) {
-				deltaPx = layout.m_steerRadiusPx;
-			}
-			else if (deltaPx < -layout.m_steerRadiusPx) {
-				deltaPx = -layout.m_steerRadiusPx;
-			}
+			// Place the thumb from the final steer value so it honours the dead zone:
+			// centered while inside it, at the ring edge at full lock (positive = left).
+			float steer = SteerFromFinger(finger);
 			p_state->m_steerActive = true;
 			p_state->m_steerOriginX = originX;
 			p_state->m_steerOriginY = originY;
-			p_state->m_steerThumbX = originX + deltaPx;
+			p_state->m_steerThumbX = originX - steer * layout.m_steerRadiusPx;
 			p_state->m_steerThumbY = originY;
 			p_state->m_steerRadius = layout.m_steerRadiusPx;
 			break;
