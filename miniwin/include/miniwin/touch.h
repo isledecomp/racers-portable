@@ -39,8 +39,10 @@ void MiniwinTouch_SetLocalPlayerCount(unsigned p_count);
 
 // Analog steering for the owning player: true while a steering finger is down, with
 // *p_steer set to the drag deflection in [-1, 1] using the game's analog convention
-// (positive steers left, like the negated device axis). Feeds the analog branch of
-// PlayerControls::UpdateSteering, so the existing rate shaping applies unchanged.
+// (positive steers left, like the negated device axis). Full lock is a horizontal drag
+// of a fixed fraction of the window width (so it scales with the display), past a small
+// center dead zone. Feeds the analog branch of PlayerControls::UpdateSteering, so the
+// existing rate shaping applies unchanged.
 bool MiniwinTouch_GetSteer(void* p_owner, float* p_steer);
 
 // Race-button edges for the owning player, polled once per PlayerControls::Update.
