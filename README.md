@@ -1,4 +1,28 @@
-# LEGO Racers, portable
+# LEGO Racers for Portmaster
+
+## Changes from upstream
+
+### SDL3 → SDL2
+
+The upstream targets SDL3. This fork backports to SDL2 (`release-2.30.9`) via FetchContent for platforms that don't ship SDL3 yet. The SDL_GPU render backend, desktop OpenGL 3.3 backend, overlay system, Emscripten/web target, and touch input overlay were removed — only OpenGL ES 3.0 remains.
+
+### Controller input
+
+The default Player 1 keyboard bindings are remapped (`gamestate.cpp`) so gptokeyb can map A=Enter→Accelerate, B=Escape→Brake, X=M→Use Item without breaking menu confirm/cancel. F1 was added (`racesession.h`) as a hardcoded pause trigger for the Start button. Player 1's binding slot defaults to the keyboard entry so gptokeyb input is picked up correctly.
+
+A gptokeyb config and PortMaster launch script are included.
+
+### Quality-of-life
+
+- `lmicmp.avi` (LEGO Media logo) is now skippable with any keypress.
+- The in-game drawn cursor is hidden (`menuinputcursor.cpp`).
+- The Exit button is removed from the main menu.
+
+### Bug fixes
+
+- `LegoS8` was `typedef char`, which becomes unsigned on ARM64 GCC. This corrupted opponent route data (rotations, positions, widths) and collision normals, causing AI racers to clip through the ground and spin wildly. Fixed by using `typedef signed char LegoS8`.
+
+---
 
 This initiative is a portable version of LEGO Racers (1999) based on the [decompilation project](https://github.com/isledecomp/racers). Our primary goal is to transform the codebase to achieve platform independence, thereby enhancing compatibility across various systems while preserving the original game's experience as faithfully as possible.
 
