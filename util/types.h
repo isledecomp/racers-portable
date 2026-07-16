@@ -13,7 +13,7 @@
 #define NULL 0
 #endif
 
-typedef char LegoS8;
+typedef signed char LegoS8;
 typedef unsigned char LegoU8;
 typedef short LegoS16;
 typedef unsigned short LegoU16;
