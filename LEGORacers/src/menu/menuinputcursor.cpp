@@ -105,17 +105,5 @@ LegoS32 MenuInputDispatcher::Cursor::UpdatePosition(undefined4)
 // FUNCTION: LEGORACERS 0x00467e00
 LegoS32 MenuInputDispatcher::Cursor::Draw()
 {
-	if (m_golExport && m_isCursorVisible && m_cursorEnabled) {
-		Rect destRect;
-
-		destRect.m_left = m_cursorX;
-		destRect.m_right = m_cursorX + m_sourceRect.m_right;
-		destRect.m_top = m_cursorY;
-		destRect.m_bottom = m_cursorY + m_sourceRect.m_right;
-
-		m_renderer->DrawImageClipped(m_cursorImage, 0, &destRect, &m_sourceRect, 0);
-		return TRUE;
-	}
-
 	return FALSE;
 }

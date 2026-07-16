@@ -109,7 +109,7 @@ void LegoRacers::Run()
 
 	if (m_cutscenes) {
 		VideoPlayer::Begin(&m_golApp, 640, 480);
-		VideoPlayer::Play(&m_golApp, "lmicmp.avi", FALSE, FALSE);
+		VideoPlayer::Play(&m_golApp, "lmicmp.avi", TRUE, FALSE);
 		VideoPlayer::Play(&m_golApp, "hvscmp.avi", TRUE, FALSE);
 		VideoPlayer::Play(&m_golApp, "introcmp.avi", TRUE, FALSE);
 		VideoPlayer::End(&m_golApp);
