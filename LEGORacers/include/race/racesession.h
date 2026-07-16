@@ -110,6 +110,7 @@ private:
 		c_keyEscape = 0x10000001,
 		c_keyPrintScreen = 0x100000b7,
 		c_keyPause = 0x100000c5,
+		c_keyStart = 0x1000003b,
 		c_keySourceAbortMask = 0x30000000,
 		c_maxScreenshotIndex = 9999,
 		c_cheatFastForward = 1 << 8,

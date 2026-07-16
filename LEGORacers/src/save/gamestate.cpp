@@ -24,15 +24,15 @@ DECOMP_SIZE_ASSERT(PersistentGameState, 0x42c)
 // GLOBAL: LEGORACERS 0x004b0624
 const LegoU32 g_keyboardInputBindingEvents[3][9] = {
 	{
-		InputDevice::c_sourceKeyboard | 0xcb,
-		InputDevice::c_sourceKeyboard | 0xcd,
-		InputDevice::c_sourceKeyboard | 0xc8,
-		InputDevice::c_sourceKeyboard | 0xd0,
-		InputDevice::c_sourceKeyboard | 0x1c,
-		InputDevice::c_sourceKeyboard | 0x9d,
-		InputDevice::c_sourceKeyboard | 0x32,
-		InputDevice::c_sourceKeyboard | 0x39,
-		InputDevice::c_sourceKeyboard | 0xb8,
+		InputDevice::c_sourceKeyboard | 0xcb,  // Left Arrow  → Steer Left
+		InputDevice::c_sourceKeyboard | 0xcd,  // Right Arrow → Steer Right
+		InputDevice::c_sourceKeyboard | 0x1c,  // Enter       → Accelerate
+		InputDevice::c_sourceKeyboard | 0x01,  // Escape      → Brake
+		InputDevice::c_sourceKeyboard | 0x32,  // M           → Use Item
+		InputDevice::c_sourceKeyboard | 0x9d,  // Right Ctrl  → Change View
+		InputDevice::c_sourceKeyboard | 0x39,  // Space       → Cycle HUD/Map
+		InputDevice::c_sourceKeyboard | 0xc8,  // Up Arrow    → Drift
+		InputDevice::c_sourceKeyboard | 0xb8,  // Right Alt   → Look Back
 	},
 	{
 		InputDevice::c_sourceKeyboard | 0x1e,
@@ -93,7 +93,7 @@ void GameState::Initialize()
 	m_state.m_inputBindings.m_players[0].m_selectedRecordId = 0;
 	m_state.m_inputBindings.m_players[0].m_selectedRecordSource = 2;
 	m_state.m_inputBindings.m_players[0].m_selectedSaveIndex = 0;
-	m_state.m_inputBindings.m_players[0].m_selectedEntryIndex = 0;
+	m_state.m_inputBindings.m_players[0].m_selectedEntryIndex = 2;
 	m_state.m_inputBindings.m_players[1].m_selectedRecordId = 0;
 	m_state.m_inputBindings.m_players[1].m_selectedRecordSource = 2;
 	m_state.m_inputBindings.m_players[1].m_selectedSaveIndex = 0;

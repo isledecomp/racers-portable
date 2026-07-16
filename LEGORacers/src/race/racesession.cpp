@@ -2454,6 +2454,7 @@ void RaceSession::OnKeyDown(LegoU32 p_keyCode)
 	switch (p_keyCode) {
 	case c_keyEscape:
 	case c_keyPause:
+	case c_keyStart:
 		if (!m_pauseState) {
 			m_pauseState = 1;
 			OpenPauseDialog();
