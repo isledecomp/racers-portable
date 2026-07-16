@@ -3,8 +3,10 @@
 // [library:synchronization] Tagged HANDLE model: Win32 HANDLEs from miniwin wrap one of
 // these records so CloseHandle can dispatch by type.
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/windows.h>
+
+#include <mutex>
 
 enum class MiniwinHandleType {
 	Mutex,
@@ -19,25 +21,27 @@ protected:
 };
 
 struct MiniwinMutexHandle : MiniwinHandle {
-	MiniwinMutexHandle() : MiniwinHandle(MiniwinHandleType::Mutex), mutex(SDL_CreateMutex()) {}
+	// Use std::recursive_mutex instead of SDL_mutex because Win32 mutexes are
+	// recursive — the game's DirectMusic code locks its per-stream mutex and
+	// then calls StopBuffer which locks the same mutex again. SDL_mutex is
+	// non-recursive, so that sequence would self-deadlock.
+	std::recursive_mutex* mutex = new std::recursive_mutex();
+
+	MiniwinMutexHandle() : MiniwinHandle(MiniwinHandleType::Mutex) {}
 	~MiniwinMutexHandle()
 	{
-		if (mutex) {
-			SDL_DestroyMutex(mutex);
-		}
+		delete mutex;
 	}
-
-	SDL_Mutex* mutex;
 };
 
 struct MiniwinFileHandle : MiniwinHandle {
-	MiniwinFileHandle(SDL_IOStream* p_stream) : MiniwinHandle(MiniwinHandleType::File), stream(p_stream) {}
+	MiniwinFileHandle(SDL_RWops* p_stream) : MiniwinHandle(MiniwinHandleType::File), stream(p_stream) {}
 	~MiniwinFileHandle()
 	{
 		if (stream) {
-			SDL_CloseIO(stream);
+			SDL_RWclose(stream);
 		}
 	}
 
-	SDL_IOStream* stream;
+	SDL_RWops* stream;
 };

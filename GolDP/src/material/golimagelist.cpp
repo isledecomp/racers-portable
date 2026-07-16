@@ -87,8 +87,8 @@ void GolImageList::LoadImageDefinitions(GolD3DRenderDevice* p_renderer, const Le
 		GolImage* item = GetItem(i);
 
 		FourBytes name[2];
-		strncpy(&name[0].m_bytes[0], parser->ReadStringWithMaxLength(sizeof(name)), sizeof(name));
-		AddName(&name[0].m_bytes[0], item);
+		strncpy(reinterpret_cast<LegoChar*>(name), parser->ReadStringWithMaxLength(sizeof(name)), sizeof(name));
+		AddName(reinterpret_cast<LegoChar*>(name), item);
 
 		parser->ReadLeftCurly();
 

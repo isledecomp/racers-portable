@@ -4,7 +4,7 @@
 // The game submits pre-transformed D3DTLVERTEX triangles; a backend is a rasterizer
 // state machine (SDL3 GPU / OpenGL 3.3 / OpenGL ES 3).
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/d3d.h>
 
 // How a channel combines the texture sample with the vertex diffuse color

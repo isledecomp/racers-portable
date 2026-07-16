@@ -6,7 +6,7 @@
 
 #include "windows.h"
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 // Event queue: the main thread pushes SDL events; the game thread drains them from
 // Win32GolApp::Tick().
@@ -37,7 +37,7 @@ void MiniwinInput_InjectMouseMotion(long p_dx, long p_dy);
 template <typename F>
 inline void MiniwinApp_RunOnMainThread(F&& p_fn)
 {
-	SDL_RunOnMainThread([](void* p_userdata) { (*static_cast<F*>(p_userdata))(); }, &p_fn, true);
+	p_fn();
 }
 
 // Seeds the emulated registry's LangID value (--language command-line argument).

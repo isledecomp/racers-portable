@@ -218,7 +218,7 @@ HANDLE CreateFile(
 		mode = "rb";
 	}
 
-	SDL_IOStream* stream = SDL_IOFromFile(resolved, mode);
+	SDL_RWops* stream = SDL_RWFromFile(resolved, mode);
 	if (!stream) {
 		return INVALID_HANDLE_VALUE;
 	}
@@ -242,7 +242,7 @@ BOOL ReadFile(
 	MiniwinPhaseScope phase(MINIWIN_PHASE_FILE_IO);
 	MiniwinSlowOpLog slowLog("ReadFile", "");
 
-	size_t read = SDL_ReadIO(static_cast<MiniwinFileHandle*>(handle)->stream, lpBuffer, nNumberOfBytesToRead);
+	size_t read = SDL_RWread(static_cast<MiniwinFileHandle*>(handle)->stream, lpBuffer, 1, nNumberOfBytesToRead);
 	if (lpNumberOfBytesRead) {
 		*lpNumberOfBytesRead = (DWORD) read;
 	}
@@ -263,7 +263,7 @@ BOOL WriteFile(
 		return FALSE;
 	}
 
-	size_t written = SDL_WriteIO(static_cast<MiniwinFileHandle*>(handle)->stream, lpBuffer, nNumberOfBytesToWrite);
+	size_t written = SDL_RWwrite(static_cast<MiniwinFileHandle*>(handle)->stream, lpBuffer, 1, nNumberOfBytesToWrite);
 	if (lpNumberOfBytesWritten) {
 		*lpNumberOfBytesWritten = (DWORD) written;
 	}
@@ -278,22 +278,22 @@ DWORD SetFilePointer(HANDLE hFile, LONG lDistanceToMove, LPLONG lpDistanceToMove
 		return INVALID_SET_FILE_POINTER;
 	}
 
-	SDL_IOWhence whence;
+	int whence;
 	switch (dwMoveMethod) {
 	case FILE_BEGIN:
-		whence = SDL_IO_SEEK_SET;
+		whence = RW_SEEK_SET;
 		break;
 	case FILE_CURRENT:
-		whence = SDL_IO_SEEK_CUR;
+		whence = RW_SEEK_CUR;
 		break;
 	case FILE_END:
-		whence = SDL_IO_SEEK_END;
+		whence = RW_SEEK_END;
 		break;
 	default:
 		return INVALID_SET_FILE_POINTER;
 	}
 
-	Sint64 pos = SDL_SeekIO(static_cast<MiniwinFileHandle*>(handle)->stream, lDistanceToMove, whence);
+	Sint64 pos = SDL_RWseek(static_cast<MiniwinFileHandle*>(handle)->stream, lDistanceToMove, whence);
 	if (pos < 0) {
 		return INVALID_SET_FILE_POINTER;
 	}
@@ -308,7 +308,7 @@ DWORD GetFileSize(HANDLE hFile, LPDWORD lpFileSizeHigh)
 		return INVALID_FILE_SIZE;
 	}
 
-	Sint64 size = SDL_GetIOSize(static_cast<MiniwinFileHandle*>(handle)->stream);
+	Sint64 size = SDL_RWsize(static_cast<MiniwinFileHandle*>(handle)->stream);
 	if (size < 0) {
 		return INVALID_FILE_SIZE;
 	}

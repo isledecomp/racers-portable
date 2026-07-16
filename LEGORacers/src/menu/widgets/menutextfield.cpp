@@ -1,3 +1,4 @@
+#include <miniwin/touch.h>
 #include "menu/widgets/menutextfield.h"
 
 #include "audio/soundgroupbinding.h"
@@ -5,7 +6,6 @@
 #include "input/inputeventqueue.h"
 #include "menu/screens/menuscreeninterface.h"
 
-#include <miniwin/touch.h>
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(MenuTextField, 0x23c)

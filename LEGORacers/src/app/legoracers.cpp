@@ -124,7 +124,6 @@ void LegoRacers::Run()
 		}
 		RunRace();
 	}
-
 	ReleaseContextAssets();
 	Shutdown();
 	ResetDisplay();

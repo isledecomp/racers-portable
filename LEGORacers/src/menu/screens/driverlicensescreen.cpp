@@ -8,8 +8,8 @@
 #include "surface/color.h"
 
 #include <ctype.h>
-#include <miniwin/touch.h>
 #include <string.h>
+#include <miniwin/touch.h>
 
 DECOMP_SIZE_ASSERT(DriverLicenseScreen, 0x23bc)
 

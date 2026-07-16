@@ -588,11 +588,11 @@ void MenuManager::OpenScreen(LegoU16 p_menuId)
 	if (m_activeScreen) {
 		m_renderer->VTable0xf4();
 		m_activeScreen->Destroy();
-
 		if (m_activeScreen) {
 			delete m_activeScreen;
 		}
 	}
+	m_activeScreen = nullptr;
 
 	m_activeScreen = m_screenFactory.CreateScreen(p_menuId);
 	m_inputDispatcher.SetActiveScreen(m_activeScreen);

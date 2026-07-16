@@ -6,6 +6,8 @@
 
 #include <miniwin/windows.h>
 
+
+
 HANDLE CreateMutex(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner, LPCSTR lpName)
 {
 	MiniwinMutexHandle* handle = new MiniwinMutexHandle();
@@ -15,7 +17,7 @@ HANDLE CreateMutex(LPSECURITY_ATTRIBUTES lpMutexAttributes, BOOL bInitialOwner, 
 	}
 
 	if (bInitialOwner) {
-		SDL_LockMutex(handle->mutex);
+		handle->mutex->lock();
 	}
 
 	return handle;
@@ -28,14 +30,13 @@ DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds)
 		return WAIT_FAILED;
 	}
 
-	SDL_Mutex* mutex = static_cast<MiniwinMutexHandle*>(handle)->mutex;
+	std::recursive_mutex* mutex = static_cast<MiniwinMutexHandle*>(handle)->mutex;
 
 	if (dwMilliseconds == 0) {
-		return SDL_TryLockMutex(mutex) ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
+		return mutex->try_lock() ? WAIT_OBJECT_0 : WAIT_TIMEOUT;
 	}
 
-	// The game only ever waits with timeout 0 or INFINITE.
-	SDL_LockMutex(mutex);
+	mutex->lock();
 	return WAIT_OBJECT_0;
 }
 
@@ -46,7 +47,7 @@ BOOL ReleaseMutex(HANDLE hMutex)
 		return FALSE;
 	}
 
-	SDL_UnlockMutex(static_cast<MiniwinMutexHandle*>(handle)->mutex);
+	static_cast<MiniwinMutexHandle*>(handle)->mutex->unlock();
 	return TRUE;
 }
 

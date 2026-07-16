@@ -2,32 +2,6 @@ cmake_minimum_required(VERSION 3.25...4.2 FATAL_ERROR)
 
 project(racers-portable LANGUAGES CXX C VERSION 0.1)
 
-if (EMSCRIPTEN)
-  add_compile_options(-pthread -gsource-map)
-  add_link_options(
-    -sUSE_WEBGL2=1
-    -sMIN_WEBGL_VERSION=2
-    -sMAX_WEBGL_VERSION=2
-    -sGL_ENABLE_GET_PROC_ADDRESS=1
-    -sALLOW_MEMORY_GROWTH=1
-    -sINITIAL_MEMORY=128mb
-    -sMAXIMUM_MEMORY=2gb
-    -sUSE_PTHREADS=1
-    -sPROXY_TO_PTHREAD=1
-    -sOFFSCREENCANVAS_SUPPORT=1
-    -sPTHREAD_POOL_SIZE_STRICT=0
-    -sFORCE_FILESYSTEM=1
-    -sWASMFS=1
-    -sEXIT_RUNTIME=1
-    -sABORT_ON_WASM_EXCEPTIONS=1
-    # Blocking game loop yields to the browser each frame via asyncify (SDL's
-    # SwapWindow/SDL_Delay call emscripten_sleep).
-    -sASYNCIFY=1
-    -gsource-map
-  )
-  set(SDL_PTHREADS ON CACHE BOOL "Enable SDL pthreads" FORCE)
-endif()
-
 include(CheckCXXSourceCompiles)
 include(CMakeDependentOption)
 include(FetchContent)
@@ -57,8 +31,7 @@ option(RACERS_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
 option(RACERS_WERROR "Treat warnings as errors" OFF)
 option(ENABLE_CLANG_TIDY "Enable clang-tidy")
 option(DOWNLOAD_DEPENDENCIES "Download dependencies" ON)
-set(RACERS_EMSCRIPTEN_HOST "" CACHE STRING "Host URL for Emscripten data streaming (e.g., https://example.com)")
-cmake_dependent_option(BUILD_SHARED_LIBS "Build goldp as a shared library" ON "NOT EMSCRIPTEN" OFF)
+option(BUILD_SHARED_LIBS "Build goldp as a shared library" ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" CACHE PATH "Directory where to put executables and dll")
 
 if (NOT DEFINED CMAKE_POSITION_INDEPENDENT_CODE)
@@ -89,22 +62,22 @@ if (RACERS_WERROR)
   endif()
 endif()
 
-# --- SDL3 ---
+# --- SDL2 ---
 if (DOWNLOAD_DEPENDENCIES)
-  set(RACERS_SDL3_GIT_REPO "https://github.com/libsdl-org/SDL.git" CACHE STRING "Git repository for SDL3")
-  set(RACERS_SDL3_GIT_TAG "release-3.4.12" CACHE STRING "Git tag for SDL3")
+  set(RACERS_SDL2_GIT_REPO "https://github.com/libsdl-org/SDL.git" CACHE STRING "Git repository for SDL2")
+  set(RACERS_SDL2_GIT_TAG "release-2.30.9" CACHE STRING "Git tag for SDL2")
   set(SDL_TEST_LIBRARY OFF)
   set(SDL_TESTS OFF)
   set(SDL_EXAMPLES OFF)
   FetchContent_Declare(
-    SDL3
-    GIT_REPOSITORY "${RACERS_SDL3_GIT_REPO}"
-    GIT_TAG "${RACERS_SDL3_GIT_TAG}"
+    SDL2
+    GIT_REPOSITORY "${RACERS_SDL2_GIT_REPO}"
+    GIT_TAG "${RACERS_SDL2_GIT_TAG}"
     GIT_SHALLOW TRUE
   )
-  FetchContent_MakeAvailable(SDL3)
+  FetchContent_MakeAvailable(SDL2)
 else()
-  find_package(SDL3 REQUIRED CONFIG)
+  find_package(SDL2 REQUIRED CONFIG)
 endif()
 
 add_subdirectory(3rdparty)
@@ -139,25 +112,8 @@ list(REMOVE_ITEM LEGORACERS_SOURCES "${CMAKE_SOURCE_DIR}/LEGORacers/src/app/guid
 # writes the dll performs through inline accessors), so drop the exe copy on the web and let
 # goldp's serve both callers. (A cleaner unification into common/ is blocked by the GolDP copy's
 # dependency on the 3D renderer classes.)
-if (EMSCRIPTEN)
-  list(REMOVE_ITEM LEGORACERS_SOURCES "${CMAKE_SOURCE_DIR}/LEGORacers/src/model/goltexturelist.cpp")
-endif()
-
 # GolDP.dll ("Gol" renderer backend), linked directly instead of LoadLibrary'd.
-#
-# common/ is compiled into BOTH goldp and legoracers (with different BUILDING_* defines) so
-# each original Win32 binary is self-contained. On desktop goldp is a separate shared library,
-# so the two common/ copies never clash. On the web everything links into ONE module, so
-# common/ must appear exactly once or wasm-ld reports ~960 duplicate symbols. There it is
-# compiled only into legoracers (with both BUILDING_* defines, see below) and goldp omits it,
-# resolving those symbols at the final link. The GolImport search-path round-trip that assumes
-# two separate globals is a no-op in racers (search paths are only ever populated by that
-# round-trip and start empty), so a single shared common/ is safe.
-if (EMSCRIPTEN)
-  add_library(goldp ${GOLDP_SOURCES})
-else()
-  add_library(goldp ${GOLDP_SOURCES} ${COMMON_SOURCES})
-endif()
+add_library(goldp ${GOLDP_SOURCES} ${COMMON_SOURCES})
 target_compile_definitions(goldp PRIVATE BUILDING_GOL)
 target_include_directories(goldp PRIVATE
   "${PROJECT_SOURCE_DIR}/GolDP/include"
@@ -169,11 +125,11 @@ generate_export_header(goldp BASE_NAME GOLDP EXPORT_MACRO_NAME GOLDP_EXPORT_INNE
 target_include_directories(goldp PUBLIC "${CMAKE_CURRENT_BINARY_DIR}" "${PROJECT_SOURCE_DIR}/GolDP")
 set_property(TARGET goldp PROPERTY C_VISIBILITY_PRESET hidden)
 set_property(TARGET goldp PROPERTY CXX_VISIBILITY_PRESET hidden)
-target_link_libraries(goldp PRIVATE miniwin SDL3::SDL3)
-if (WIN32 AND BUILD_SHARED_LIBS)
-  target_sources(goldp PRIVATE GolDP/GolDP.def)
-endif()
-set_property(TARGET goldp PROPERTY OUTPUT_NAME "GolDP")
+target_link_libraries(goldp PRIVATE miniwin SDL2::SDL2)
+  if (WIN32 AND BUILD_SHARED_LIBS)
+    target_sources(goldp PRIVATE GolDP/GolDP.def)
+  endif()
+  set_property(TARGET goldp PROPERTY OUTPUT_NAME "GolDP")
 
 # LEGORacers.exe
 if (RACERS_BUILD_APP)
@@ -186,7 +142,7 @@ if (RACERS_BUILD_APP)
     "${PROJECT_SOURCE_DIR}/util"
     "${PROJECT_SOURCE_DIR}/GolDP/include"
   )
-  target_link_libraries(legoracers PRIVATE goldp miniwin indeo5 SDL3::SDL3)
+  target_link_libraries(legoracers PRIVATE goldp miniwin indeo5 SDL2::SDL2)
 
   # The decomp headers use MSVC-isms (calling conventions, #pragma warning) that
   # compat.h neutralizes; not every header includes it, so inject it up front for
@@ -201,23 +157,6 @@ if (RACERS_BUILD_APP)
     set_property(SOURCE LEGORacers/racers.rc APPEND PROPERTY OBJECT_DEPENDS "${PROJECT_SOURCE_DIR}/LEGORacers/resources/racers.ico")
   endif()
   set_property(TARGET legoracers PROPERTY OUTPUT_NAME "LEGORacers")
-
-  if (EMSCRIPTEN)
-    # Web build: stream game data (WASMFS fetch) + persist saves (OPFS), emit an HTML shell
-    # (shell.html -- it also maps the URL query string into argv so launch options can be
-    # exercised from the address bar), and define the streamed-data host.
-    target_sources(legoracers PRIVATE LEGORacers/emscripten/filesystem.cpp)
-    # common/ is compiled only here on the web (goldp omits it — see the goldp note). Define
-    # BUILDING_GOL alongside BUILDING_LEGORACERS so the single shared common/ copy contains
-    # every symbol both sides need (SetGolImport + CreateGolImport, GolStream::ClearSearchPaths,
-    # ...). No app/dll source branches on BUILDING_GOL and no common/ class puts a member or
-    # vtable behind it, so class layouts are unchanged.
-    target_compile_definitions(legoracers PRIVATE BUILDING_GOL)
-    target_compile_definitions(legoracers PRIVATE "RACERS_EMSCRIPTEN_HOST=\"${RACERS_EMSCRIPTEN_HOST}\"")
-    set_property(TARGET legoracers PROPERTY SUFFIX ".html")
-    target_link_options(legoracers PRIVATE "SHELL:--shell-file ${CMAKE_SOURCE_DIR}/LEGORacers/emscripten/shell.html")
-    set_property(TARGET legoracers APPEND PROPERTY LINK_DEPENDS "${CMAKE_SOURCE_DIR}/LEGORacers/emscripten/shell.html")
-  endif()
 endif()
 
 find_program(CLANGFORMAT_BIN NAMES clang-format)
@@ -238,8 +177,6 @@ if (EXISTS "${CLANGFORMAT_BIN}")
         "${PROJECT_SOURCE_DIR}/GolDP/*.h"
         "${PROJECT_SOURCE_DIR}/common/*.cpp"
         "${PROJECT_SOURCE_DIR}/common/*.h"
-        "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengl3/*.h"
-        "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengl3/*.cpp"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengles3/*.h"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/backends/opengles3/*.cpp"
         "${PROJECT_SOURCE_DIR}/miniwin/src/d3d/*.h"
@@ -278,8 +215,6 @@ if (CLANG_LIBRARY AND TARGET Python3::Interpreter)
         common
       --exclude
         LEGORacers/src/app/main.cpp
-        LEGORacers/emscripten/filesystem.cpp
-        LEGORacers/emscripten/filesystem.h
         LEGORacers/src/video/avireader.cpp
         LEGORacers/src/video/videoplayer.cpp
         LEGORacers/include/video/avireader.h

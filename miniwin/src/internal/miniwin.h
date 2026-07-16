@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 
 #define LOG_CATEGORY_MINIWIN (SDL_LOG_CATEGORY_CUSTOM)
 
@@ -26,7 +26,7 @@
 
 #define MINIWIN_TRACE(...)                                                                                             \
 	do {                                                                                                               \
-		SDL_LogTrace(LOG_CATEGORY_MINIWIN, __VA_ARGS__);                                                               \
+		SDL_LogVerbose(LOG_CATEGORY_MINIWIN, __VA_ARGS__);                                                              \
 	} while (0)
 
 // Stall diagnosis (RACERS_WATCHDOG=<ms>): the game thread bumps the heartbeat every
@@ -41,17 +41,17 @@ enum MiniwinPhase {
 	MINIWIN_PHASE_EVENT_QUEUE = 5,
 };
 
-extern SDL_AtomicInt g_miniwinHeartbeat;
-extern SDL_AtomicInt g_miniwinPhase;
+extern SDL_atomic_t g_miniwinHeartbeat;
+extern SDL_atomic_t g_miniwinPhase;
 
 struct MiniwinPhaseScope {
 	int m_previous;
 	MiniwinPhaseScope(int p_phase)
 	{
-		m_previous = SDL_GetAtomicInt(&g_miniwinPhase);
-		SDL_SetAtomicInt(&g_miniwinPhase, p_phase);
+		m_previous = SDL_AtomicGet(&g_miniwinPhase);
+		SDL_AtomicSet(&g_miniwinPhase, p_phase);
 	}
-	~MiniwinPhaseScope() { SDL_SetAtomicInt(&g_miniwinPhase, m_previous); }
+	~MiniwinPhaseScope() { SDL_AtomicSet(&g_miniwinPhase, m_previous); }
 };
 
 // Logs any scope that takes longer than 30 ms ("[slow] <what> <detail> took N ms").
@@ -64,11 +64,11 @@ struct MiniwinSlowOpLog {
 	{
 		m_what = p_what;
 		SDL_strlcpy(m_detail, p_detail ? p_detail : "", sizeof(m_detail));
-		m_startNs = SDL_GetTicksNS();
+		m_startNs = (Uint64)SDL_GetTicks() * 1000000ULL;
 	}
 	~MiniwinSlowOpLog()
 	{
-		Uint64 elapsedNs = SDL_GetTicksNS() - m_startNs;
+		Uint64 elapsedNs = (Uint64)SDL_GetTicks() * 1000000ULL - m_startNs;
 		if (elapsedNs > 30000000ull) {
 			SDL_Log("[slow] %s %s took %.1f ms", m_what, m_detail, elapsedNs / 1e6);
 		}

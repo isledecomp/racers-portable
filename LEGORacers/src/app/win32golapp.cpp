@@ -14,9 +14,8 @@
 #include "input/mousedevice.h"
 #include "render/golcommondrawstate.h"
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/miniwinapp.h>
-#include <miniwin/touch.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>
@@ -86,27 +85,15 @@ void Win32GolApp::Initialize(const LegoChar* p_windowName, const LegoChar* p_fil
 		// a desktop with no ES driver), demote it and retry with the next usable backend so
 		// a persisted renderer preference can never leave the game unable to open a window.
 		for (;;) {
-			SDL_GL_ResetAttributes();
-			// HIGH_PIXEL_DENSITY: draw at the display's real pixel count on HiDPI screens so
-			// --resolution native is truly native (no-op at ratio 1). Cursor math is point-space
-			// (SDL_GetWindowSize), so unaffected; --resolution original opts out of the fill.
 			Uint32 windowFlags =
-				SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY | MiniwinBackend_PrepareWindowFlags();
-#ifdef __EMSCRIPTEN__
-			// RESIZABLE: the canvas fills the tab via CSS (100vw/vh) and SDL tracks that size on
-			// resize. SDL's fill-document mode is unusable here (OffscreenCanvas under
-			// PROXY_TO_PTHREAD). HIGH_PIXEL_DENSITY also sizes the canvas backing store.
-			windowFlags |= SDL_WINDOW_RESIZABLE;
-#endif
-			window = SDL_CreateWindow(title, 640, 480, windowFlags);
+				SDL_WINDOW_HIDDEN | SDL_WINDOW_OPENGL | MiniwinBackend_PrepareWindowFlags();
+			window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 640, 480, windowFlags);
 			if (window || !MiniwinBackend_DemoteActiveBackend()) {
 				break;
 			}
 		}
 		if (window) {
-			// The original hid the Win32 cursor over the client area (WM_SETCURSOR
-			// with a NULL class cursor); the game draws its own pointer.
-			SDL_HideCursor();
+			SDL_ShowCursor(SDL_DISABLE);
 		}
 	});
 
@@ -458,51 +445,38 @@ void Win32GolApp::UpdateMousePosition()
 LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 {
 	m_eventHandler = p_eventHandler;
-	// While a finger owns the menu cursor, the real-mouse re-assert would yank the
-	// cursor away between a tap's press and release; the finger position is applied
-	// after the drain below instead.
-	if (!MiniwinTouch_MenuCursorActive()) {
-		UpdateMousePosition();
-	}
+	UpdateMousePosition();
 
 	// Replaces the PeekMessage pump + AppWndProc: SDL events (forwarded from the main
-	// thread, or pumped inline in MiniwinApp_PollEvent on the web) are dispatched to the
-	// same GolAppEventHandler notifications the Win32 window procedure produced.
+	// thread) are dispatched to the same GolAppEventHandler notifications the Win32
+	// window procedure produced.
 	SDL_Event event;
 	do {
 		while (MiniwinApp_PollEvent(event)) {
 			// Alt+Enter toggles fullscreen and must not leak into the game's input
 			// layer (Enter doubles as the menu click).
-			if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)) {
+			if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT)) {
 				ToggleFullscreen();
 				g_suppressReturnUp = true;
 				continue;
 			}
-			if (g_suppressReturnUp && event.type == SDL_EVENT_KEY_UP && event.key.key == SDLK_RETURN) {
+			if (g_suppressReturnUp && event.type == SDL_KEYUP && event.key.keysym.sym == SDLK_RETURN) {
 				g_suppressReturnUp = false;
 				continue;
 			}
 
-			MiniwinInput_HandleEvent(event);
-			MiniwinTouch_HandleEvent(event);
+	MiniwinInput_HandleEvent(event);
 
 			switch (event.type) {
-			case SDL_EVENT_QUIT:
+			case SDL_QUIT:
 				// WM_QUIT equivalent.
 				m_eventHandler = 0;
 				return 0;
-			case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-				NotifyCloseRequested();
-				break;
-			case SDL_EVENT_KEY_DOWN:
-				// WM_CHAR equivalent, synthesized from key events. SDL text input is
-				// deliberately not used: staying an Input Method Kit client caused
-				// intermittent ~500 ms window-server stalls during races
-				// (IMKCFRunLoopWakeUpReliable mach port errors), and the game's text
-				// fields only take simple characters.
+			case SDL_KEYDOWN:
+				// WM_CHAR equivalent, synthesized from key events.
 				if (m_eventHandler) {
 					undefined4 ch = 0;
-					SDL_Keycode key = event.key.key;
+					SDL_Keycode key = event.key.keysym.sym;
 					if (key == SDLK_RETURN) {
 						ch = '\r';
 					}
@@ -512,18 +486,13 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 					else if (key == SDLK_ESCAPE) {
 						ch = 0x1b;
 					}
-					else if (key >= 32 && key < 127 && !MiniwinTouch_TextInputActive()) {
-						// While SDL text input is active (touch on-screen keyboard),
-						// printable characters arrive as SDL_EVENT_TEXT_INPUT below;
-						// suppressing this synthesis keeps web physical keyboards from
-						// double-typing. Return/backspace/escape never ride text input
-						// and stay on this path.
+					else if (key >= 32 && key < 127) {
 						ch = (undefined4) key;
-						if (event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CAPS)) {
+						if (event.key.keysym.mod & (KMOD_SHIFT | KMOD_CAPS)) {
 							if (key >= 'a' && key <= 'z') {
 								ch = (undefined4) (key - 'a' + 'A');
 							}
-							else if (event.key.mod & SDL_KMOD_SHIFT) {
+							else if (event.key.keysym.mod & KMOD_SHIFT) {
 								// US-layout shifted symbols; enough for name entry.
 								const char* base = "1234567890-=[]\\;',./`";
 								const char* shifted = "!@#$%^&*()_+{}|:\"<>?~";
@@ -540,11 +509,9 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 					}
 				}
 				break;
-			case SDL_EVENT_TEXT_INPUT:
-				// Touch on-screen keyboard characters (SDL text input is started only
-				// on touch-capable devices — see MiniwinTouch_TextFieldFocus). The
-				// game's text fields take simple characters, so ASCII only.
-				if (m_eventHandler && MiniwinTouch_TextInputActive() && event.text.text) {
+			case SDL_TEXTINPUT:
+				// Keyboard text input for name entry fields.
+				if (m_eventHandler) {
 					for (const char* text = event.text.text; *text; text++) {
 						unsigned char ch = (unsigned char) *text;
 						if (ch >= 32 && ch < 127) {
@@ -554,34 +521,40 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 					}
 				}
 				break;
-			case SDL_EVENT_WINDOW_FOCUS_LOST:
-				// WM_ACTIVATEAPP(FALSE) equivalent.
-				if ((m_flags & c_flagDisplayActive) && !m_disabled) {
-					OutputDebugString("Deactivate App\n");
-					OnAppDeactivated();
-					if (m_eventHandler) {
-						m_eventHandler->OnAppDeactivated();
+			case SDL_WINDOWEVENT: {
+				switch (event.window.event) {
+				case SDL_WINDOWEVENT_CLOSE:
+					NotifyCloseRequested();
+					break;
+				case SDL_WINDOWEVENT_FOCUS_LOST:
+					if ((m_flags & c_flagDisplayActive) && !m_disabled) {
+						OutputDebugString("Deactivate App\n");
+						OnAppDeactivated();
+						if (m_eventHandler) {
+							m_eventHandler->OnAppDeactivated();
+						}
+						m_disabled = TRUE;
+						m_pollInput = 0;
+						m_inputManager.SuspendActiveDevices();
+						MiniwinSound_SetSuspended(true);
 					}
-					m_disabled = TRUE;
-					m_pollInput = 0;
-					m_inputManager.SuspendActiveDevices();
-					MiniwinSound_SetSuspended(true);
+					break;
+				case SDL_WINDOWEVENT_FOCUS_GAINED:
+					if ((m_flags & c_flagDisplayActive) && m_disabled) {
+						OutputDebugString("Activate App\n");
+						OnAppActivated();
+						m_disabled = FALSE;
+						m_pollInput = 1;
+						m_inputManager.RestoreSuspendedDevices();
+						MiniwinSound_SetSuspended(false);
+						if (m_eventHandler) {
+							m_eventHandler->OnAppActivated();
+						}
+					}
+					break;
 				}
 				break;
-			case SDL_EVENT_WINDOW_FOCUS_GAINED:
-				// WM_ACTIVATEAPP(TRUE) / WM_SIZE(SIZE_RESTORED) equivalent.
-				if ((m_flags & c_flagDisplayActive) && m_disabled) {
-					OutputDebugString("Activate App\n");
-					OnAppActivated();
-					m_disabled = FALSE;
-					m_pollInput = 1;
-					m_inputManager.RestoreSuspendedDevices();
-					MiniwinSound_SetSuspended(false);
-					if (m_eventHandler) {
-						m_eventHandler->OnAppActivated();
-					}
-				}
-				break;
+			}
 			default:
 				break;
 			}
@@ -594,32 +567,7 @@ LegoS32 Win32GolApp::Tick(GolAppEventHandler* p_eventHandler)
 		}
 	} while (m_disabled);
 
-#ifdef __EMSCRIPTEN__
-	// Re-read the cursor after this frame's input is drained so the drawn cursor tracks the
-	// current mouse with no one-frame lag; the read at the top of Tick is stale by exactly the
-	// events just processed. (Desktop compensates with the DirectInput relative accumulation,
-	// which the web disables because the browser provides an absolute cursor.)
-	if (!MiniwinTouch_MenuCursorActive()) {
-		UpdateMousePosition();
-	}
-#endif
-
-	// Touch tap-to-click: assert the finger's cursor position after the drain so the
-	// click already sitting in the DirectInput ring dispatches under the finger when
-	// the menu processes this frame's input.
-	if (m_eventHandler && m_golDrawState) {
-		long touchCursorX;
-		long touchCursorY;
-		if (MiniwinTouch_GetMenuCursor(
-				&touchCursorX,
-				&touchCursorY,
-				(int) m_golDrawState->m_width,
-				(int) m_golDrawState->m_height
-			)) {
-			m_eventHandler->OnCursorInside();
-			m_eventHandler->OnCursorMoved(touchCursorX, touchCursorY);
-		}
-	}
+	UpdateMousePosition();
 
 	DWORD time = timeGetTime();
 	m_frameDeltaMs = time - m_lastFrameTimeMs;

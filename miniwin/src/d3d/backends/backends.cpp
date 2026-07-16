@@ -450,7 +450,11 @@ void MiniwinBackendSavePref(MiniwinBackendId p_backend)
 		return;
 	}
 	const char* name = MiniwinBackendName(p_backend);
-	SDL_SaveFile(path, name, SDL_strlen(name));
+	SDL_RWops* rw = SDL_RWFromFile(path, "wb");
+	if (rw) {
+		SDL_RWwrite(rw, name, 1, SDL_strlen(name));
+		SDL_RWclose(rw);
+	}
 }
 
 bool MiniwinBackendLoadPref(MiniwinBackendId* p_id)
@@ -689,7 +693,7 @@ void MiniwinBackend_HandleFrameDump(MiniwinRenderBackend* p_backend, Uint64 p_fr
 				SDL_Surface* shot = p_backend->ReadBackbuffer();
 				if (shot) {
 					SDL_SaveBMP(shot, path);
-					SDL_DestroySurface(shot);
+					SDL_FreeSurface(shot);
 				}
 			}
 		}
@@ -703,7 +707,7 @@ void MiniwinBackend_HandleFrameDump(MiniwinRenderBackend* p_backend, Uint64 p_fr
 	char spec[512];
 	SDL_strlcpy(spec, dumpSpec, sizeof(spec));
 	char* saveptr = nullptr;
-	for (char* entry = SDL_strtok_r(spec, ",", &saveptr); entry; entry = SDL_strtok_r(nullptr, ",", &saveptr)) {
+	for (char* entry = strtok_r(spec, ",", &saveptr); entry; entry = strtok_r(nullptr, ",", &saveptr)) {
 		char* colon = SDL_strchr(entry, ':');
 		if (!colon) {
 			continue;
@@ -713,7 +717,7 @@ void MiniwinBackend_HandleFrameDump(MiniwinRenderBackend* p_backend, Uint64 p_fr
 			SDL_Surface* shot = p_backend->ReadBackbuffer();
 			if (shot) {
 				SDL_SaveBMP(shot, colon + 1);
-				SDL_DestroySurface(shot);
+				SDL_FreeSurface(shot);
 			}
 		}
 	}

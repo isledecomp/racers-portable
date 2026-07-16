@@ -6,7 +6,6 @@
 #include "backends.h"
 #include "es3loader.h"
 #include "miniwin.h"
-#include "overlay.h"
 #include "renderbackend.h"
 
 #include <miniwin/miniwinapp.h>
@@ -184,7 +183,6 @@ Uint32 MiniwinGles3_PrepareWindowFlags()
 {
 	// Reset first: enumerating another GL backend can leave stale attributes that make ES
 	// context creation fail (EGL_BAD_MATCH on EGL-based drivers, e.g. ANGLE).
-	SDL_GL_ResetAttributes();
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_ES);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 0);
@@ -237,7 +235,7 @@ bool MiniwinGles3Backend::Init(SDL_Window* p_window)
 		return false;
 	}
 
-	if (!SDL_GL_MakeCurrent(p_window, m_context)) {
+	if (SDL_GL_MakeCurrent(p_window, m_context) < 0) {
 		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_GL_MakeCurrent failed: %s", SDL_GetError());
 		return false;
 	}
@@ -376,7 +374,7 @@ void MiniwinGles3Backend::UpdateViewport()
 {
 	int dw = 0;
 	int dh = 0;
-	SDL_GetWindowSizeInPixels(m_window, &dw, &dh);
+	SDL_GL_GetDrawableSize(m_window, &dw, &dh);
 	if (dw <= 0 || dh <= 0 || m_width <= 0 || m_height <= 0) {
 		return;
 	}
@@ -446,12 +444,12 @@ void MiniwinGles3Backend::UpdateTexture(Uint32 p_id, int p_width, int p_height, 
 	static const char* dumpDir = getenv("RACERS_DUMP_TEX");
 	if (dumpDir && p_id <= 64) {
 		SDL_Surface* surface =
-			SDL_CreateSurfaceFrom(p_width, p_height, SDL_PIXELFORMAT_RGBA32, const_cast<void*>(p_rgba), p_width * 4);
+			SDL_CreateRGBSurfaceWithFormatFrom(const_cast<void*>(p_rgba), p_width, p_height, 32, p_width * 4, SDL_PIXELFORMAT_RGBA32);
 		if (surface) {
 			char path[512];
 			SDL_snprintf(path, sizeof(path), "%s/tex%02u_%dx%d.bmp", dumpDir, (unsigned) p_id, p_width, p_height);
 			SDL_SaveBMP(surface, path);
-			SDL_DestroySurface(surface);
+			SDL_FreeSurface(surface);
 		}
 	}
 
@@ -778,7 +776,7 @@ void MiniwinGles3Backend::HandleFrameDump()
 				SDL_Surface* shot = ReadBackbuffer();
 				if (shot) {
 					SDL_SaveBMP(shot, path);
-					SDL_DestroySurface(shot);
+					SDL_FreeSurface(shot);
 				}
 			}
 		}
@@ -794,7 +792,7 @@ void MiniwinGles3Backend::HandleFrameDump()
 	SDL_strlcpy(spec, dumpSpec, sizeof(spec));
 
 	char* saveptr = nullptr;
-	for (char* entry = SDL_strtok_r(spec, ",", &saveptr); entry; entry = SDL_strtok_r(nullptr, ",", &saveptr)) {
+	for (char* entry = strtok_r(spec, ",", &saveptr); entry; entry = strtok_r(nullptr, ",", &saveptr)) {
 		char* colon = SDL_strchr(entry, ':');
 		if (!colon) {
 			continue;
@@ -810,7 +808,7 @@ void MiniwinGles3Backend::HandleFrameDump()
 					(unsigned long long) m_frameCounter,
 					colon + 1
 				);
-				SDL_DestroySurface(shot);
+				SDL_FreeSurface(shot);
 			}
 		}
 	}
@@ -825,7 +823,7 @@ void MiniwinGles3Backend::Present()
 	static const char* statsEnv = getenv("RACERS_GL_STATS");
 	if (statsEnv) {
 		static Uint64 lastNs, minNs, maxNs, sumNs;
-		Uint64 nowNs = SDL_GetTicksNS();
+		Uint64 nowNs = (Uint64)SDL_GetTicks() * 1000000ULL;
 		if (lastNs) {
 			Uint64 deltaNs = nowNs - lastNs;
 			sumNs += deltaNs;
@@ -876,7 +874,7 @@ void MiniwinGles3Backend::Present()
 	{
 		int dw = 0;
 		int dh = 0;
-		SDL_GetWindowSizeInPixels(m_window, &dw, &dh);
+		SDL_GL_GetDrawableSize(m_window, &dw, &dh);
 		gl.glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 		// WebGL driver-bug workaround: some environments (e.g. Android Chrome) briefly
 		// flash black during a glBlitFramebuffer on transitions; any write to the back
@@ -906,9 +904,6 @@ void MiniwinGles3Backend::Present()
 			GL_LINEAR
 		);
 	}
-
-	// Touch overlay on top of the composited frame (letterbox bars included).
-	MiniwinOverlay_Emit(this);
 
 	{
 		MiniwinSlowOpLog slowLog("SwapWindow", "");
@@ -969,7 +964,7 @@ SDL_Surface* MiniwinGles3Backend::ReadBackbuffer()
 	int rx = 0;
 	int ry = 0;
 
-	SDL_Surface* surface = SDL_CreateSurface(dw, dh, SDL_PIXELFORMAT_ABGR8888);
+	SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, dw, dh, 0, SDL_PIXELFORMAT_ABGR8888);
 	if (!surface) {
 		return nullptr;
 	}

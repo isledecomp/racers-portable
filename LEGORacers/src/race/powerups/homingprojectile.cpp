@@ -74,7 +74,7 @@ PowerupProjectile* HomingProjectile::Destroy(undefined4 p_flags)
 // FUNCTION: LEGORACERS 0x00423630
 void HomingProjectile::Destruct()
 {
-	PowerupProjectile::~PowerupProjectile();
+	this->~PowerupProjectile();
 }
 
 // FUNCTION: LEGORACERS 0x00423640

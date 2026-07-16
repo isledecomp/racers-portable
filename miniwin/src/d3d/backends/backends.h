@@ -5,7 +5,7 @@
 // MiniwinBackend_* to the selected one. Kept separate from the public
 // MiniwinBackend_Acquire/PrepareWindowFlags seam so adding a backend is local.
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/miniwinapp.h>
 
 class MiniwinRenderBackend;

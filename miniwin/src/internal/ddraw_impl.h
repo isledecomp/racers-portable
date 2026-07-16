@@ -2,7 +2,7 @@
 
 // Internal object model for the DirectDraw/Direct3D emulation.
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/d3d.h>
 #include <miniwin/ddraw.h>
 #include <miniwin/miniwinapp.h>

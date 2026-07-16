@@ -1,11 +1,9 @@
-// [library:window] WinMain and the Win32 message-pump entry point are replaced by the
-// SDL3 callback entry points. The game's own flow (GameMain -> LegoRacers::Run) is a
-// blocking nested loop and runs unchanged on a dedicated game thread; SDL events are
-// forwarded to it through the miniwin event queue.
+// [library:window] WinMain replacement: traditional main() entry point with an event
+// loop forwarding SDL2 events to the miniwin event queue. The game's own flow (GameMain
+// -> LegoRacers::Run) is a blocking nested loop and runs on a dedicated game thread.
+// SDL events are forwarded to it through the miniwin event queue.
 
-#define SDL_MAIN_USE_CALLBACKS
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_main.h>
+#include <SDL2/SDL.h>
 
 // clang-format off
 #include <windows.h>
@@ -19,7 +17,6 @@
 #include "types.h"
 
 #include <miniwin/miniwinapp.h>
-#include <miniwin/touch.h>
 #include <objbase.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,11 +27,7 @@
 #include <direct.h>
 #endif
 
-#ifdef __EMSCRIPTEN__
-#include "emscripten/filesystem.h"
-
-#include <emscripten.h>
-#endif
+#include <thread>
 
 DECOMP_SIZE_ASSERT(CommandLineArgs, 0x84)
 
@@ -83,8 +76,8 @@ void SplitCommand()
 }
 
 static SDL_Thread* g_gameThread;
-static SDL_AtomicInt g_gameThreadDone;
-static SDL_AtomicInt g_gameResult;
+static SDL_atomic_t g_gameThreadDone;
+static SDL_atomic_t g_gameResult;
 
 static int SDLCALL GameThread(void*)
 {
@@ -95,8 +88,8 @@ static int SDLCALL GameThread(void*)
 	int result = GameMain(g_commandLineArgs.m_argc, g_commandLineArgs.m_argv);
 
 	SDL_Log("Game loop finished (result %d)", result);
-	SDL_SetAtomicInt(&g_gameResult, result);
-	SDL_SetAtomicInt(&g_gameThreadDone, 1);
+	SDL_AtomicSet(&g_gameResult, result);
+	SDL_AtomicSet(&g_gameThreadDone, 1);
 	return result;
 }
 
@@ -107,56 +100,30 @@ static void DisplayArgumentHelp()
 	SDL_Log("  --language <index>   language index (seeds the emulated registry LangID)");
 	SDL_Log("  --scale <mode>       fullscreen scaling: letterbox (default) or stretch");
 	SDL_Log("  --resolution <mode>  render at native (default) or original (640x480) resolution");
-	SDL_Log("  --renderer <name>    render backend: sdlgpu (default), opengl3, or opengles3");
+	SDL_Log("  --renderer <name>    render backend: opengles3");
 	SDL_Log("  --help               show this help");
 	SDL_Log("Original game options (passed through):");
 	SDL_Log("  -novideo -window -horzres <n> -vertres <n>");
 }
 
-#ifdef __EMSCRIPTEN__
-// Stub emscripten's JSEvents.fullscreenEnabled to false so the game can never exit the user's
-// browser fullscreen (it guards every emscripten fullscreen op). Kept in its own function so the
-// EM_ASM's JS braces cannot confuse clang-format's indentation of the caller.
-static void DisableBrowserFullscreenExit()
+// The Emacs, Vim, and Emacs file format settings are no longer needed.
+static bool InitGame(int argc, char** argv)
 {
-	// clang-format off
-	MAIN_THREAD_EM_ASM({JSEvents.fullscreenEnabled = function() { return false; }});
-// clang-format on
-}
-#endif
-
-SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
-{
-	// The game thread owns the GL context; without async dispatch, macOS CGL context
-	// updates block the swapping thread until the main thread runs, which shows up as
-	// random multi-hundred-ms frame stalls.
 	SDL_SetHint(SDL_HINT_MAC_OPENGL_ASYNC_DISPATCH, "1");
 
-	// Touch is handled explicitly by the miniwin touch layer: SDL must not synthesize
-	// mouse events from fingers (menus get deliberate tap-to-click instead) nor
-	// fingers from the mouse — except under RACERS_TOUCH=1, which turns the desktop
-	// mouse into a test finger so the touch path can be exercised without a
-	// touchscreen.
-	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
-	const char* touchDebug = SDL_getenv("RACERS_TOUCH");
-	SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, touchDebug && SDL_atoi(touchDebug) ? "1" : "0");
-
-	if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD | SDL_INIT_HAPTIC | SDL_INIT_EVENTS)) {
-		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "SDL_Init failed: %s", SDL_GetError());
-		return SDL_APP_FAILURE;
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_EVENTS) < 0) {
+		SDL_Log("SDL_Init failed: %s", SDL_GetError());
+		return false;
 	}
 
-	// Saved so the in-game renderer switch can relaunch with a different --renderer.
 	MiniwinApp_SetCommandLine(argc, argv);
 
-	// Portable arguments are consumed here; everything else is passed through to
-	// LegoRacers::ParseArguments untouched.
 	bool rendererFromCli = false;
 	g_commandLine[0] = '\0';
 	for (int i = 1; i < argc; i++) {
 		if (SDL_strcmp(argv[i], "--help") == 0) {
 			DisplayArgumentHelp();
-			return SDL_APP_SUCCESS;
+			return false;
 		}
 		if (SDL_strcmp(argv[i], "--language") == 0 && i + 1 < argc) {
 			MiniwinSetRegistryLangId((DWORD) SDL_atoi(argv[i + 1]));
@@ -183,38 +150,8 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 			i++;
 			continue;
 		}
-		if (SDL_strcmp(argv[i], "--renderer") == 0 && i + 1 < argc) {
-#ifdef __EMSCRIPTEN__
-			// Single renderer on web (WebGL2), nothing to switch to; ignore it (persisting a
-			// desktop backend would just warn on every later launch).
-			SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "--renderer ignored on web (single WebGL2 renderer)");
-			i++;
-			continue;
-#else
-			MiniwinBackendId backend;
-			if (!MiniwinBackendFromName(argv[i + 1], &backend)) {
-				SDL_LogError(
-					SDL_LOG_CATEGORY_APPLICATION,
-					"--renderer: unknown renderer '%s' (use sdlgpu, opengl3, or opengles3)",
-					argv[i + 1]
-				);
-				return SDL_APP_FAILURE;
-			}
-			// An explicit --renderer is authoritative and sticks: persist it as the saved
-			// preference so a later plain launch (and the in-game menu) follow this choice.
-			MiniwinSetBackend(backend);
-			MiniwinBackendSavePref(backend);
-			rendererFromCli = true;
-			i++;
-			continue;
-#endif
-		}
 		if (SDL_strcmp(argv[i], "--path") == 0 && i + 1 < argc) {
-#if defined(__EMSCRIPTEN__)
-			// Web data lives at a fixed mount (/racers), resolved by basename regardless of cwd;
-			// nothing to chdir into, so ignore it.
-			SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "--path ignored on web (data streamed from a fixed mount)");
-#elif defined(_WIN32)
+#if defined(_WIN32)
 			_chdir(argv[i + 1]);
 #else
 			if (chdir(argv[i + 1]) != 0) {
@@ -231,21 +168,6 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		SDL_strlcat(g_commandLine, argv[i], sizeof(g_commandLine));
 	}
 
-#ifdef __EMSCRIPTEN__
-	// The browser cannot be forced into true fullscreen without a user gesture, and the game
-	// defaults to fullscreen (the intro movies and the display both request it). Always run
-	// windowed on the web so nothing goes fullscreen unprompted; a later Alt+Enter (a user
-	// gesture) can still opt in. -window also makes VideoPlayer's WantsFullscreen() false.
-	if (!SDL_strstr(g_commandLine, "-window")) {
-		if (g_commandLine[0]) {
-			SDL_strlcat(g_commandLine, " ", sizeof(g_commandLine));
-		}
-		SDL_strlcat(g_commandLine, "-window", sizeof(g_commandLine));
-	}
-#endif
-
-	// With no explicit --renderer, honor the renderer chosen in a previous session's
-	// in-game menu (persisted on switch), read before the window is created.
 	if (!rendererFromCli) {
 		MiniwinBackendId saved;
 		if (MiniwinBackendLoadPref(&saved)) {
@@ -253,52 +175,25 @@ SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
 		}
 	}
 
-#ifdef __EMSCRIPTEN__
-	// Mount streamed game data (WASMFS fetch) + persistent user data (OPFS) before the game
-	// starts opening files.
-	Racers_SetupWebFilesystem();
-
-	// Keep the game from ever exiting the user's browser fullscreen.
-	DisableBrowserFullscreenExit();
-#endif
-
 	CoInitialize(0);
 
 	g_hInstance = reinterpret_cast<HINSTANCE>(1);
 	g_hPrevInstance = NULL;
 	SplitCommand();
 
-	SDL_SetAtomicInt(&g_gameThreadDone, 0);
-	SDL_SetAtomicInt(&g_gameResult, 0);
+	SDL_AtomicSet(&g_gameThreadDone, 0);
+	SDL_AtomicSet(&g_gameResult, 0);
 
-#ifdef __EMSCRIPTEN__
-	// On the web the game runs on THIS thread — the proxied main thread, which owns the
-	// OffscreenCanvas under PROXY_TO_PTHREAD, so WebGL works. Run() is a blocking loop;
-	// asyncify lets its SDL_GL_SwapWindow/SDL_Delay yield to the browser each frame (present +
-	// event processing), keeping it responsive without a separate game thread.
-	//
-	// The loop returns only when the user quits. Returning into SDL's cooperative EXIT_RUNTIME
-	// teardown does not actually terminate here: PROXY_TO_PTHREAD and the still-running audio
-	// device keep keepRuntimeAlive() true, so the module is left alive but idle (a frozen canvas),
-	// and a browser tab cannot close itself anyway. Force the runtime down instead — this stops
-	// the worker threads and unblocks the exit. Quit is a normal exit, so status 0.
-	GameThread(nullptr);
-	emscripten_force_exit(0);
-	return SDL_APP_SUCCESS; // unreachable: emscripten_force_exit does not return
-#else
 	g_gameThread = SDL_CreateThread(GameThread, "GameThread", nullptr);
 	if (!g_gameThread) {
 		SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "Unable to start game thread: %s", SDL_GetError());
-		return SDL_APP_FAILURE;
+		return false;
 	}
 
-	return SDL_APP_CONTINUE;
-#endif
+	return true;
 }
 
 // Synthetic input for automated testing: RACERS_AUTOKEY="ms:scancode[:holdMs],..."
-// injects a key press of the given SDL scancode at each timestamp; the release
-// follows holdMs later (default 80).
 static void PumpAutoKeys()
 {
 	static const char* spec = getenv("RACERS_AUTOKEY");
@@ -322,8 +217,8 @@ static void PumpAutoKeys()
 		SDL_strlcpy(buffer, spec, sizeof(buffer));
 
 		char* savePtr = nullptr;
-		for (char* entry = SDL_strtok_r(buffer, ",", &savePtr); entry && keyCount + 2 <= (int) SDL_arraysize(keys);
-			 entry = SDL_strtok_r(nullptr, ",", &savePtr)) {
+		for (char* entry = strtok_r(buffer, ",", &savePtr); entry && keyCount + 2 <= (int) SDL_arraysize(keys);
+			 entry = strtok_r(nullptr, ",", &savePtr)) {
 			char* colon = SDL_strchr(entry, ':');
 			if (!colon) {
 				continue;
@@ -348,9 +243,6 @@ static void PumpAutoKeys()
 			keys[keyCount].m_up = true;
 			keyCount++;
 		}
-
-		// Overlapping holds queue their releases out of order; the drain below needs
-		// ascending timestamps.
 		for (int i = 1; i < keyCount; i++) {
 			AutoKey pending = keys[i];
 			int j = i - 1;
@@ -361,20 +253,20 @@ static void PumpAutoKeys()
 		}
 	}
 
-	static SDL_Keymod heldMods = SDL_KMOD_NONE;
+	static SDL_Keymod heldMods = KMOD_NONE;
 
 	Uint64 elapsed = SDL_GetTicks() - startMs;
 	while (cursor < keyCount && keys[cursor].m_atMs <= elapsed) {
-		SDL_Keymod mod = SDL_KMOD_NONE;
+		SDL_Keymod mod = KMOD_NONE;
 		switch (keys[cursor].m_scancode) {
 		case SDL_SCANCODE_LALT:
-			mod = SDL_KMOD_LALT;
+			mod = KMOD_LALT;
 			break;
 		case SDL_SCANCODE_LCTRL:
-			mod = SDL_KMOD_LCTRL;
+			mod = KMOD_LCTRL;
 			break;
 		case SDL_SCANCODE_LSHIFT:
-			mod = SDL_KMOD_LSHIFT;
+			mod = KMOD_LSHIFT;
 			break;
 		default:
 			break;
@@ -388,159 +280,50 @@ static void PumpAutoKeys()
 
 		SDL_Event event;
 		SDL_zero(event);
-		event.type = keys[cursor].m_up ? SDL_EVENT_KEY_UP : SDL_EVENT_KEY_DOWN;
-		event.key.scancode = keys[cursor].m_scancode;
-		event.key.key = SDL_GetKeyFromScancode(keys[cursor].m_scancode, 0, false);
-		event.key.down = !keys[cursor].m_up;
-		event.key.repeat = false;
-		event.key.mod = heldMods;
+		event.type = keys[cursor].m_up ? SDL_KEYUP : SDL_KEYDOWN;
+		event.key.keysym.scancode = keys[cursor].m_scancode;
+		event.key.keysym.sym = SDL_GetKeyFromScancode(keys[cursor].m_scancode);
+		event.key.keysym.mod = heldMods;
+		event.key.state = keys[cursor].m_up ? SDL_RELEASED : SDL_PRESSED;
 		MiniwinApp_PushEvent(event);
 		cursor++;
 	}
 }
 
-// Scripted touch injection: RACERS_AUTOTOUCH="ms:verb:nx:ny[:finger],..." with verb
-// d(own)/m(ove)/u(p) and window coordinates normalized to 0..1 — drives the miniwin
-// touch layer end-to-end without a touchscreen (the companion of RACERS_AUTOKEY).
-// Taps must be held across at least one game frame (~50 ms) to register: the race
-// hooks poll edges once per frame.
-static void PumpAutoTouch()
+static void PumpEvents()
 {
-	static const char* spec = getenv("RACERS_AUTOTOUCH");
-	if (!spec || !spec[0]) {
-		return;
-	}
-
-	struct AutoTouch {
-		Uint64 m_atMs;
-		Uint32 m_type;
-		float m_nx;
-		float m_ny;
-		SDL_FingerID m_fingerId;
-	};
-	static AutoTouch touches[128];
-	static int touchCount = 0;
-	static int cursor = 0;
-	static Uint64 startMs = 0;
-
-	if (!startMs) {
-		startMs = SDL_GetTicks();
-		char buffer[1024];
-		SDL_strlcpy(buffer, spec, sizeof(buffer));
-
-		char* savePtr = nullptr;
-		for (char* entry = SDL_strtok_r(buffer, ",", &savePtr); entry && touchCount < (int) SDL_arraysize(touches);
-			 entry = SDL_strtok_r(nullptr, ",", &savePtr)) {
-			char* fields[5] = {};
-			int fieldCount = 0;
-			char* fieldSave = nullptr;
-			for (char* field = SDL_strtok_r(entry, ":", &fieldSave); field && fieldCount < 5;
-				 field = SDL_strtok_r(nullptr, ":", &fieldSave)) {
-				fields[fieldCount++] = field;
-			}
-			if (fieldCount < 4) {
-				continue;
-			}
-			Uint32 type;
-			switch (fields[1][0]) {
-			case 'd':
-				type = SDL_EVENT_FINGER_DOWN;
-				break;
-			case 'm':
-				type = SDL_EVENT_FINGER_MOTION;
-				break;
-			case 'u':
-				type = SDL_EVENT_FINGER_UP;
-				break;
-			default:
-				continue;
-			}
-			touches[touchCount].m_atMs = (Uint64) SDL_atoi(fields[0]);
-			touches[touchCount].m_type = type;
-			touches[touchCount].m_nx = (float) SDL_atof(fields[2]);
-			touches[touchCount].m_ny = (float) SDL_atof(fields[3]);
-			touches[touchCount].m_fingerId = fieldCount >= 5 ? (SDL_FingerID) SDL_atoi(fields[4]) : 1;
-			touchCount++;
-		}
-	}
-
-	Uint64 elapsed = SDL_GetTicks() - startMs;
-	while (cursor < touchCount && touches[cursor].m_atMs <= elapsed) {
-		SDL_WindowID windowId = 0;
-		int windowCount = 0;
-		SDL_Window** windows = SDL_GetWindows(&windowCount);
-		if (windows && windowCount > 0) {
-			windowId = SDL_GetWindowID(windows[0]);
-		}
-		SDL_free(windows);
-		if (!windowId) {
-			break; // window not up yet; retry next iterate without consuming
-		}
-
-		SDL_Event event;
-		SDL_zero(event);
-		event.type = touches[cursor].m_type;
-		event.tfinger.touchID = MINIWIN_TOUCH_TEST_DEVICE;
-		event.tfinger.fingerID = touches[cursor].m_fingerId;
-		event.tfinger.x = touches[cursor].m_nx;
-		event.tfinger.y = touches[cursor].m_ny;
-		event.tfinger.pressure = 1.0f;
-		event.tfinger.windowID = windowId;
+	SDL_Event event;
+	while (SDL_PollEvent(&event)) {
 		MiniwinApp_PushEvent(event);
-		cursor++;
 	}
 }
 
-SDL_AppResult SDL_AppIterate(void* appstate)
+int main(int argc, char* argv[])
 {
-	if (SDL_GetAtomicInt(&g_gameThreadDone)) {
-		return SDL_APP_SUCCESS;
+	if (!InitGame(argc, argv)) {
+		return 1;
 	}
 
+	int heartbeat = 0;
+	while (true) {
+		if (SDL_AtomicGet(&g_gameThreadDone)) {
+			break;
+		}
+
+	PumpEvents();
 	PumpAutoKeys();
-	PumpAutoTouch();
-	SDL_Delay(1);
-	return SDL_APP_CONTINUE;
-}
-
-SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
-{
-	// Stall correlation aid: window-server state changes, on when the watchdog is.
-	static const char* watchdog = getenv("RACERS_WATCHDOG");
-	if (watchdog && watchdog[0]) {
-		switch (event->type) {
-		case SDL_EVENT_WINDOW_OCCLUDED:
-		case SDL_EVENT_WINDOW_EXPOSED:
-		case SDL_EVENT_WINDOW_FOCUS_LOST:
-		case SDL_EVENT_WINDOW_FOCUS_GAINED:
-		case SDL_EVENT_WINDOW_MOVED:
-		case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
-			SDL_Log("[window] event 0x%x at t=%llu", event->type, (unsigned long long) SDL_GetTicks());
-			break;
-		default:
-			break;
-		}
+	std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
-	MiniwinApp_PushEvent(*event);
-	return SDL_APP_CONTINUE;
-}
-
-void SDL_AppQuit(void* appstate, SDL_AppResult result)
-{
 	if (g_gameThread) {
-		// Ask the game to shut down and wait for the thread to finish. The game
-		// thread's teardown marshals window operations back to this thread
-		// (MiniwinApp_RunOnMainThread), so keep pumping while it winds down —
-		// blocking outright deadlocks both sides.
 		SDL_Event quitEvent;
 		SDL_zero(quitEvent);
-		quitEvent.type = SDL_EVENT_QUIT;
+		quitEvent.type = SDL_QUIT;
 		MiniwinApp_PushEvent(quitEvent);
 
-		while (!SDL_GetAtomicInt(&g_gameThreadDone)) {
+		while (!SDL_AtomicGet(&g_gameThreadDone)) {
 			SDL_PumpEvents();
-			SDL_Delay(5);
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
 
 		int status = 0;
@@ -550,4 +333,5 @@ void SDL_AppQuit(void* appstate, SDL_AppResult result)
 
 	MiniwinBackend_Shutdown();
 	CoUninitialize();
+	return 0;
 }

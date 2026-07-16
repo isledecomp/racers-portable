@@ -1,4 +1,4 @@
-// [library:audio] WinMM timers over SDL3. timeSetEvent callbacks fire on SDL's timer
+// [library:audio] WinMM timers over SDL2. timeSetEvent callbacks fire on SDL's timer
 // thread, matching the original's multimedia-timer-thread model.
 
 #include "miniwin.h"
@@ -18,9 +18,9 @@ struct MiniwinTimer {
 	bool periodic;
 };
 
-static Uint32 SDLCALL MiniwinTimerCallback(void* userdata, SDL_TimerID timerID, Uint32 interval)
+static Uint32 SDLCALL MiniwinTimerCallback(Uint32 interval, void* param)
 {
-	MiniwinTimer* timer = static_cast<MiniwinTimer*>(userdata);
+	MiniwinTimer* timer = static_cast<MiniwinTimer*>(param);
 	timer->callback(timer->id, 0, timer->user, 0, 0);
 
 	if (timer->periodic) {

@@ -1,3 +1,4 @@
+#include <miniwin/touch.h>
 #include "race/racesession.h"
 
 #include "app/golapp.h"
@@ -35,7 +36,6 @@
 #include "world/golworlddatabase.h"
 
 #include <memory.h>
-#include <miniwin/touch.h>
 #include <mmsystem.h>
 #include <stdio.h>
 #include <string.h>

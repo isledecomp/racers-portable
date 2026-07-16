@@ -8,7 +8,7 @@ add_library(miniaudio STATIC
 target_include_directories(miniaudio PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/miniaudio/extras/miniaudio_split")
 
 # Disable most features since we don't need them: miniaudio is used purely as an
-# in-memory mixing engine; SDL3 owns the audio device.
+# in-memory mixing engine; SDL2 owns the audio device.
 target_compile_definitions(miniaudio PUBLIC
   MA_ENABLE_ONLY_SPECIFIC_BACKENDS
   MA_NO_DECODING
@@ -37,4 +37,5 @@ target_include_directories(indeo5
   PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-indeo5"
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-indeo5/shim"
 )
+target_link_libraries(indeo5 PRIVATE pthread)
 set_target_properties(indeo5 PROPERTIES C_STANDARD 99)

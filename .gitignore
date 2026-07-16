@@ -20,6 +20,7 @@ venv.bak/
 LEGORACERSPROGRESS.*
 GOLDPPROGRESS.*
 *.pyc
+gamefiles/
 
 # By convention we put the retail binaries into the project root.
 LEGORacers.exe

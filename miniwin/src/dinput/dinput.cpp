@@ -1,7 +1,7 @@
-// [library:input] DirectInput 5 emulation over SDL3. Buffered keyboard/mouse device
+// [library:input] DirectInput 5 emulation over SDL2. Buffered keyboard/mouse device
 // data is fed from the game thread's event drain (MiniwinInput_HandleEvent, called by
 // Win32GolApp::Tick for every forwarded SDL event); gamepads are polled through the
-// SDL3 gamepad API; the GUID_Sine force-feedback effect maps to gamepad rumble.
+// SDL2 game controller API; the GUID_Sine force-feedback effect maps to controller rumble.
 
 #include "miniwin.h"
 
@@ -230,7 +230,7 @@ static Uint8 ScancodeToDik(SDL_Scancode p_scancode)
 
 static SDL_Scancode DikToScancode(Uint8 p_dik)
 {
-	for (int i = 0; i < SDL_SCANCODE_COUNT; i++) {
+	for (int i = 0; i < SDL_NUM_SCANCODES; i++) {
 		if (ScancodeToDik((SDL_Scancode) i) == p_dik) {
 			return (SDL_Scancode) i;
 		}
@@ -302,25 +302,25 @@ void MiniwinInput_InjectMouseMotion(long p_dx, long p_dy)
 void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 {
 	switch (p_event.type) {
-	case SDL_EVENT_KEY_DOWN:
-	case SDL_EVENT_KEY_UP: {
+	case SDL_KEYDOWN:
+	case SDL_KEYUP: {
 		if (p_event.key.repeat) {
 			break; // DirectInput buffered keyboards do not auto-repeat.
 		}
-		Uint8 dik = ScancodeToDik(p_event.key.scancode);
+		Uint8 dik = ScancodeToDik(p_event.key.keysym.scancode);
 		if (dik) {
-			g_keyboardRing.Push(dik, p_event.type == SDL_EVENT_KEY_DOWN ? 0x80 : 0x00);
+			g_keyboardRing.Push(dik, p_event.type == SDL_KEYDOWN ? 0x80 : 0x00);
 		}
 		break;
 	}
-	case SDL_EVENT_MOUSE_MOTION: {
+	case SDL_MOUSEMOTION: {
 		// Scale the raw window-space delta into the game's cursor space (consumed by the menu
 		// cursor's relative accumulation and by widget drag handlers). The fractional remainder
 		// is carried across events so slow motion is not lost to integer rounding.
 		static float accumX = 0.0f;
 		static float accumY = 0.0f;
-		accumX += p_event.motion.xrel * g_mouseScaleX;
-		accumY += p_event.motion.yrel * g_mouseScaleY;
+		accumX += (float) p_event.motion.xrel * g_mouseScaleX;
+		accumY += (float) p_event.motion.yrel * g_mouseScaleY;
 		LONG dx = (LONG) accumX;
 		LONG dy = (LONG) accumY;
 		accumX -= (float) dx;
@@ -333,13 +333,13 @@ void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 		}
 		break;
 	}
-	case SDL_EVENT_MOUSE_WHEEL:
-		if (p_event.wheel.y != 0.0f) {
-			g_mouseRing.Push(DIMOFS_Z, (DWORD) (LONG) (p_event.wheel.y * 120.0f));
+	case SDL_MOUSEWHEEL:
+		if (p_event.wheel.y != 0) {
+			g_mouseRing.Push(DIMOFS_Z, (DWORD) p_event.wheel.y);
 		}
 		break;
-	case SDL_EVENT_MOUSE_BUTTON_DOWN:
-	case SDL_EVENT_MOUSE_BUTTON_UP: {
+	case SDL_MOUSEBUTTONDOWN:
+	case SDL_MOUSEBUTTONUP: {
 		DWORD ofs;
 		switch (p_event.button.button) {
 		case SDL_BUTTON_LEFT:
@@ -357,7 +357,7 @@ void MiniwinInput_HandleEvent(const SDL_Event& p_event)
 		default:
 			return;
 		}
-		g_mouseRing.Push(ofs, p_event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ? 0x80 : 0x00);
+		g_mouseRing.Push(ofs, p_event.type == SDL_MOUSEBUTTONDOWN ? 0x80 : 0x00);
 		break;
 	}
 	default:
@@ -425,7 +425,7 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 
 	Kind m_kind;
 	bool m_acquired = false;
-	SDL_Gamepad* m_gamepad = nullptr;
+	SDL_GameController* m_gamepad = nullptr;
 	SDL_JoystickID m_joystickId = 0;
 	DWORD m_deadZone = 0; // DirectInput units, 0..10000
 	LONG m_rangeMin = -1000;
@@ -437,17 +437,27 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 	~MiniwinInputDevice() override
 	{
 		if (m_gamepad) {
-			SDL_Gamepad* gamepad = m_gamepad;
-			MiniwinApp_RunOnMainThread([gamepad]() { SDL_CloseGamepad(gamepad); });
+			SDL_GameControllerClose(m_gamepad);
 		}
 	}
 
 	bool OpenGamepad(SDL_JoystickID p_id)
 	{
 		m_joystickId = p_id;
-		SDL_Gamepad** result = &m_gamepad;
-		MiniwinApp_RunOnMainThread([result, p_id]() { *result = SDL_OpenGamepad(p_id); });
-		return m_gamepad != nullptr;
+		for (int i = 0; i < SDL_NumJoysticks(); i++) {
+			if (SDL_IsGameController(i)) {
+				SDL_GameController* c = SDL_GameControllerOpen(i);
+				if (c) {
+					SDL_Joystick* js = SDL_GameControllerGetJoystick(c);
+					if (SDL_JoystickInstanceID(js) == p_id) {
+						m_gamepad = c;
+						return true;
+					}
+					SDL_GameControllerClose(c);
+				}
+			}
+		}
+		return false;
 	}
 
 	HRESULT QueryInterface(REFIID riid, void** ppvObject) override
@@ -488,7 +498,7 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 			break;
 		case Kind::Joystick: {
 			pdidi->dwDevType = DIDEVTYPE_JOYSTICK;
-			const char* name = m_gamepad ? SDL_GetGamepadName(m_gamepad) : "Gamepad";
+			const char* name = m_gamepad ? SDL_GameControllerName(m_gamepad) : "Gamepad";
 			SDL_strlcpy(pdidi->tszProductName, name ? name : "Gamepad", sizeof(pdidi->tszProductName));
 			SDL_strlcpy(pdidi->tszInstanceName, pdidi->tszProductName, sizeof(pdidi->tszInstanceName));
 			pdidi->guidInstance = JoystickGuid(m_joystickId);
@@ -727,14 +737,14 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 		}
 
 		DIJOYSTATE2* state = (DIJOYSTATE2*) lpvData;
-		state->lX = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTX));
-		state->lY = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTY));
-		state->lRx = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTX));
-		state->lRy = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
+		state->lX = ScaleAxis(SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_LEFTX));
+		state->lY = ScaleAxis(SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_LEFTY));
+		state->lRx = ScaleAxis(SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_RIGHTX));
+		state->lRy = ScaleAxis(SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_RIGHTY));
 
 		// Combined trigger axis: right trigger pulls positive, left negative.
-		Sint16 lt = SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER);
-		Sint16 rt = SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER);
+		Sint16 lt = SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_TRIGGERLEFT);
+		Sint16 rt = SDL_GameControllerGetAxis(m_gamepad, SDL_CONTROLLER_AXIS_TRIGGERRIGHT);
 		state->lZ = ScaleAxis((Sint16) ((rt - lt) / 2 * 2));
 
 		state->rgdwPOV[0] = 0xFFFFFFFF;
@@ -743,7 +753,7 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 		state->rgdwPOV[3] = 0xFFFFFFFF;
 
 		for (int i = 0; i < 16; i++) {
-			state->rgbButtons[i] = SDL_GetGamepadButton(m_gamepad, (SDL_GamepadButton) i) ? 0x80 : 0x00;
+			state->rgbButtons[i] = SDL_GameControllerGetButton(m_gamepad, (SDL_GameControllerButton) i) ? 0x80 : 0x00;
 		}
 
 		return DI_OK;
@@ -792,11 +802,6 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 			return DIERR_GENERIC;
 		}
 
-		SDL_PropertiesID props = SDL_GetGamepadProperties(m_gamepad);
-		if (!SDL_GetBooleanProperty(props, SDL_PROP_GAMEPAD_CAP_RUMBLE_BOOLEAN, false)) {
-			return DIERR_GENERIC;
-		}
-
 		DWORD magnitude = 5000;
 		if (lpeff && lpeff->lpvTypeSpecificParams && lpeff->cbTypeSpecificParams >= sizeof(DIPERIODIC)) {
 			magnitude = ((const DIPERIODIC*) lpeff->lpvTypeSpecificParams)->dwMagnitude;
@@ -811,14 +816,14 @@ HRESULT MiniwinInputEffect::Start(DWORD, DWORD)
 {
 	m_playing = true;
 	Uint16 strength = (Uint16) ((Uint32) m_magnitude * 65535 / 10000);
-	SDL_RumbleGamepad(m_device->m_gamepad, strength, strength, 600000);
+	SDL_GameControllerRumble(m_device->m_gamepad, strength, strength, 600000);
 	return DI_OK;
 }
 
 HRESULT MiniwinInputEffect::Stop()
 {
 	m_playing = false;
-	SDL_RumbleGamepad(m_device->m_gamepad, 0, 0, 0);
+	SDL_GameControllerRumble(m_device->m_gamepad, 0, 0, 0);
 	return DI_OK;
 }
 
@@ -835,6 +840,7 @@ HRESULT MiniwinInputEffect::SetParameters(LPCDIEFFECT peff, DWORD dwFlags)
 }
 
 struct MiniwinDirectInput : public IDirectInputA {
+	// Creates a joystick device from a GUID synthesized from the joystick instance ID.
 	HRESULT CreateDevice(REFGUID rguid, LPDIRECTINPUTDEVICEA* lplpDirectInputDevice, IUnknown* pUnkOuter) override
 	{
 		if (!lplpDirectInputDevice) {
@@ -872,31 +878,36 @@ struct MiniwinDirectInput : public IDirectInputA {
 			return DI_OK;
 		}
 
-		int count = 0;
-		SDL_JoystickID* ids = SDL_GetGamepads(&count);
-		if (!ids) {
-			return DI_OK;
-		}
+		for (int i = 0; i < SDL_NumJoysticks(); i++) {
+			if (!SDL_IsGameController(i)) {
+				continue;
+			}
 
-		for (int i = 0; i < count; i++) {
-			// For the force-feedback pass, report every gamepad; CreateEffect verifies
-			// actual rumble support and fails safely without it.
+			// Open the controller temporarily to get the instance ID.
+			SDL_GameController* c = SDL_GameControllerOpen(i);
+			if (!c) {
+				continue;
+			}
+			SDL_Joystick* js = SDL_GameControllerGetJoystick(c);
+			SDL_JoystickID id = SDL_JoystickInstanceID(js);
+
 			DIDEVICEINSTANCEA instance;
 			memset(&instance, 0, sizeof(instance));
 			instance.dwSize = sizeof(instance);
 			instance.dwDevType = DIDEVTYPE_JOYSTICK;
-			instance.guidInstance = JoystickGuid(ids[i]);
+			instance.guidInstance = JoystickGuid(id);
 
-			const char* name = SDL_GetGamepadNameForID(ids[i]);
+			const char* name = SDL_GameControllerNameForIndex(i);
 			SDL_strlcpy(instance.tszProductName, name ? name : "Gamepad", sizeof(instance.tszProductName));
 			SDL_strlcpy(instance.tszInstanceName, instance.tszProductName, sizeof(instance.tszInstanceName));
+
+			SDL_GameControllerClose(c);
 
 			if (!lpCallback(&instance, pvRef)) {
 				break;
 			}
 		}
 
-		SDL_free(ids);
 		return DI_OK;
 	}
 };

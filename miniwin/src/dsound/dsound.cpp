@@ -1,5 +1,5 @@
 // [library:audio] DirectSound emulation over a miniaudio no-device engine pulled by an
-// SDL3 audio stream. Secondary buffers wrap their byte storage in a ma_audio_buffer, so
+// SDL2 audio callback. Secondary buffers wrap their byte storage in a ma_audio_buffer, so
 // the game's Lock/write/Unlock cycles are naturally visible to the mixer — including the
 // music streamer's 2 s ring buffer, whose play cursor GetCurrentPosition reports from the
 // mixer's read position.
@@ -16,69 +16,56 @@ static const DWORD c_engineSampleRate = 22050;
 static const DWORD c_engineChannels = 2;
 
 static ma_engine g_engine;
-static SDL_AudioStream* g_stream;
+static SDL_AudioDeviceID g_deviceId = 0;
 
 // The original's DirectSound buffers lacked DSBCAPS_GLOBALFOCUS, so audio muted
 // whenever the app lost focus; the window layer mirrors that through this hook.
 void MiniwinSound_SetSuspended(bool p_suspended)
 {
-	if (!g_stream) {
+	if (!g_deviceId) {
 		return;
 	}
-	if (p_suspended) {
-		SDL_PauseAudioStreamDevice(g_stream);
-	}
-	else {
-		SDL_ResumeAudioStreamDevice(g_stream);
-	}
+	SDL_PauseAudioDevice(g_deviceId, p_suspended);
 }
 static bool g_engineReady;
 
-static void SDLCALL PullAudio(void* p_userdata, SDL_AudioStream* p_stream, int p_additionalAmount, int p_totalAmount)
+static void SDLCALL PullAudio(void* p_userdata, Uint8* p_stream, int p_len)
 {
-	static float buffer[4096];
+	float* buffer = (float*) p_stream;
 	const int frameSize = (int) (sizeof(float) * c_engineChannels);
+	int framesWanted = p_len / frameSize;
 
-	while (p_additionalAmount > 0) {
-		ma_uint64 framesWanted = (ma_uint64) (p_additionalAmount / frameSize);
-		if (framesWanted > SDL_arraysize(buffer) / c_engineChannels) {
-			framesWanted = SDL_arraysize(buffer) / c_engineChannels;
-		}
-		if (!framesWanted) {
-			break;
-		}
+	ma_uint64 framesRead = 0;
+	ma_engine_read_pcm_frames(&g_engine, buffer, framesWanted, &framesRead);
 
-		ma_uint64 framesRead = 0;
-		if (ma_engine_read_pcm_frames(&g_engine, buffer, framesWanted, &framesRead) != MA_SUCCESS || !framesRead) {
-			break;
-		}
+	int filledBytes = (int) (framesRead * frameSize);
+	if (filledBytes < p_len) {
+		memset(p_stream + filledBytes, 0, p_len - filledBytes);
+	}
 
-		static const char* statsEnv = getenv("RACERS_AUDIO_STATS");
-		if (statsEnv) {
-			static ma_uint64 totalFrames = 0;
-			static float peak = 0.0f;
-			for (ma_uint64 i = 0; i < framesRead * c_engineChannels; i++) {
-				float v = buffer[i] < 0.0f ? -buffer[i] : buffer[i];
-				if (v > peak) {
-					peak = v;
-				}
-			}
-			totalFrames += framesRead;
-			static ma_uint64 lastReport = 0;
-			if (totalFrames - lastReport >= c_engineSampleRate * 2) {
-				lastReport = totalFrames;
-				SDL_LogInfo(
-					LOG_CATEGORY_MINIWIN,
-					"audio: %llu frames pulled, peak %.3f",
-					(unsigned long long) totalFrames,
-					peak
-				);
-				peak = 0.0f;
+	static const char* statsEnv = getenv("RACERS_AUDIO_STATS");
+	if (statsEnv) {
+		static ma_uint64 totalFrames = 0;
+		static float peak = 0.0f;
+		int samples = framesWanted * (int) c_engineChannels;
+		for (int i = 0; i < samples; i++) {
+			float v = buffer[i] < 0.0f ? -buffer[i] : buffer[i];
+			if (v > peak) {
+				peak = v;
 			}
 		}
-
-		SDL_PutAudioStreamData(p_stream, buffer, (int) (framesRead * frameSize));
-		p_additionalAmount -= (int) (framesRead * frameSize);
+		totalFrames += framesWanted;
+		static ma_uint64 lastReport = 0;
+		if (totalFrames - lastReport >= c_engineSampleRate * 2) {
+			lastReport = totalFrames;
+			SDL_LogInfo(
+				LOG_CATEGORY_MINIWIN,
+				"audio: %llu frames pulled, peak %.3f",
+				(unsigned long long) totalFrames,
+				peak
+			);
+			peak = 0.0f;
+		}
 	}
 }
 
@@ -98,17 +85,20 @@ static bool EnsureEngine()
 	}
 
 	SDL_AudioSpec spec;
-	spec.format = SDL_AUDIO_F32;
-	spec.channels = (int) c_engineChannels;
+	SDL_zero(spec);
+	spec.format = AUDIO_F32;
+	spec.channels = (Uint8) c_engineChannels;
 	spec.freq = (int) c_engineSampleRate;
-	g_stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, PullAudio, nullptr);
-	if (!g_stream) {
-		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_OpenAudioDeviceStream failed: %s", SDL_GetError());
+	spec.samples = 4096;
+	spec.callback = PullAudio;
+	g_deviceId = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
+	if (!g_deviceId) {
+		SDL_LogError(LOG_CATEGORY_MINIWIN, "SDL_OpenAudioDevice failed: %s", SDL_GetError());
 		ma_engine_uninit(&g_engine);
 		return false;
 	}
 
-	SDL_ResumeAudioStreamDevice(g_stream);
+	SDL_PauseAudioDevice(g_deviceId, 0);
 	g_engineReady = true;
 	return true;
 }

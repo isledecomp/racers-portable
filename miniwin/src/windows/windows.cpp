@@ -1,7 +1,8 @@
 #include "miniwin.h"
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <miniwin/miniwinapp.h>
+#include <thread>
 #include <miniwin/objbase.h>
 #include <miniwin/windows.h>
 
@@ -167,7 +168,7 @@ void PostQuitMessage(int nExitCode)
 {
 	SDL_Event event;
 	SDL_zero(event);
-	event.type = SDL_EVENT_QUIT;
+	event.type = SDL_QUIT;
 	SDL_PushEvent(&event);
 }
 
@@ -189,16 +190,16 @@ LRESULT DispatchMessage(const MSG* lpMsg)
 
 int GetSystemMetrics(int nIndex)
 {
-	const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
-	if (!mode) {
+	SDL_DisplayMode mode;
+	if (SDL_GetDesktopDisplayMode(0, &mode) != 0) {
 		return 0;
 	}
 
 	switch (nIndex) {
 	case SM_CXSCREEN:
-		return mode->w;
+		return mode.w;
 	case SM_CYSCREEN:
-		return mode->h;
+		return mode.h;
 	default:
 		return 0;
 	}
@@ -248,8 +249,8 @@ BOOL GetCursorPos(LPPOINT lpPoint)
 		return FALSE;
 	}
 
-	float x = 0.f;
-	float y = 0.f;
+	int x = 0;
+	int y = 0;
 #ifdef __EMSCRIPTEN__
 	// The web has no global screen space. Report the cursor in window (canvas) coordinates --
 	// the space GetClientRect and (web) ClientToScreen use -- so the game's cursor mapping is
@@ -260,8 +261,8 @@ BOOL GetCursorPos(LPPOINT lpPoint)
 #else
 	SDL_GetGlobalMouseState(&x, &y);
 #endif
-	lpPoint->x = (LONG) x;
-	lpPoint->y = (LONG) y;
+	lpPoint->x = x;
+	lpPoint->y = y;
 	return TRUE;
 }
 
@@ -318,12 +319,7 @@ HCURSOR LoadCursor(HINSTANCE hInstance, LPCSTR lpCursorName)
 int ShowCursor(BOOL bShow)
 {
 	g_showCursorCount += bShow ? 1 : -1;
-	if (g_showCursorCount >= 0) {
-		SDL_ShowCursor();
-	}
-	else {
-		SDL_HideCursor();
-	}
+	SDL_ShowCursor(g_showCursorCount >= 0 ? SDL_ENABLE : SDL_DISABLE);
 	return g_showCursorCount;
 }
 
@@ -412,11 +408,7 @@ LPSTR lstrcat(LPSTR lpString1, LPCSTR lpString2)
 
 void Sleep(DWORD dwMilliseconds)
 {
-	// The game's frame limiter sleeps for the remainder of the 12 ms frame budget.
-	// SDL_Delay overshoots by several milliseconds on macOS, dragging the frame rate
-	// well below the original's ~83 FPS cap; the original ran with timeBeginPeriod(1)
-	// precision, which SDL_DelayPrecise matches.
-	SDL_DelayPrecise((Uint64) dwMilliseconds * 1000000ull);
+	std::this_thread::sleep_for(std::chrono::milliseconds(dwMilliseconds));
 }
 
 int MultiByteToWideChar(

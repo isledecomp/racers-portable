@@ -1,3 +1,4 @@
+#include <miniwin/touch.h>
 // [library:video] The DirectShow-based player is replaced by an in-tree pipeline:
 // AviReader demuxes the RIFF container and the vendored FFmpeg Indeo 5 decoder produces
 // YUV410P pictures (validated byte-exact against ffmpeg). Each frame is converted to
@@ -11,12 +12,12 @@
 #include "decomp.h"
 #include "video/avireader.h"
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <indeo5dec.h>
 #include <miniwin/miniwinapp.h>
-#include <miniwin/touch.h>
 #include <stdlib.h>
 #include <string.h>
+#include <thread>
 
 namespace
 {
@@ -177,15 +178,16 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 		g_video->m_height = height;
 	}
 
-	SDL_AudioStream* audio = NULL;
+	SDL_AudioDeviceID audioDev = 0;
 	if (reader.HasAudio() && reader.GetAudioBitsPerSample() == 16) {
 		SDL_AudioSpec spec;
-		spec.format = SDL_AUDIO_S16LE;
-		spec.channels = (int) reader.GetAudioChannels();
+		SDL_zero(spec);
+		spec.format = AUDIO_S16SYS;
+		spec.channels = (Uint8) reader.GetAudioChannels();
 		spec.freq = (int) reader.GetAudioSampleRate();
-		audio = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, NULL, NULL);
-		if (audio) {
-			SDL_ResumeAudioStreamDevice(audio);
+		audioDev = SDL_OpenAudioDevice(NULL, 0, &spec, NULL, 0);
+		if (audioDev) {
+			SDL_PauseAudioDevice(audioDev, 0);
 		}
 	}
 
@@ -199,8 +201,8 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 	AviReader::ChunkType type;
 	while (!aborted && g_video->m_rgba && (type = reader.ReadChunk(&data, &size)) != AviReader::e_endOfFile) {
 		if (type == AviReader::e_audio) {
-			if (audio && size) {
-				SDL_PutAudioStreamData(audio, data, (int) size);
+			if (audioDev && size) {
+				SDL_QueueAudio(audioDev, data, (Uint32) size);
 			}
 			continue;
 		}
@@ -220,12 +222,12 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 
 		// Pace against the wall clock from the first presented frame.
 		if (!startNs) {
-			startNs = SDL_GetTicksNS();
+			startNs = (Uint64) SDL_GetTicks() * 1000000ULL;
 		}
 		Uint64 targetNs = startNs + frameIndex * frameDurationNs;
-		Uint64 nowNs = SDL_GetTicksNS();
+		Uint64 nowNs = (Uint64) SDL_GetTicks() * 1000000ULL;
 		if (targetNs > nowNs) {
-			SDL_DelayPrecise(targetNs - nowNs);
+			std::this_thread::sleep_for(std::chrono::nanoseconds(targetNs - nowNs));
 		}
 		frameIndex++;
 
@@ -238,39 +240,23 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 		SDL_Event repostEvent;
 		bool repost = false;
 		while (MiniwinApp_PollEvent(event)) {
-			if (event.type == SDL_EVENT_QUIT || event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED) {
+			if (event.type == SDL_QUIT) {
 				repostEvent = event;
 				repost = true;
 				aborted = true;
 			}
 			else if (
-				event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_RETURN && (event.key.mod & SDL_KMOD_ALT)
+				event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_RETURN && (event.key.keysym.mod & KMOD_ALT)
 			) {
-#ifndef __EMSCRIPTEN__
-				// Alt+Enter toggles fullscreen, mirroring the game's message pump. The
-				// game's own toggle is unavailable here (its display does not exist until
-				// the movies finish), so drive the window directly and hand the resulting
-				// mode to the game's first display init; the backend reads the drawable
-				// size every present, so the letterbox follows. On the web we stay in soft
-				// fullscreen (fill the tab) and never enter the browser's real fullscreen.
+				// Alt+Enter toggles fullscreen.
 				SDL_Window* window = g_video->m_window;
-				MiniwinApp_RunOnMainThread([window]() {
-					bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
-					SDL_SetWindowFullscreen(window, !fullscreen);
-					MiniwinApp_SetVideoFullscreenChoice(!fullscreen);
-				});
-#endif
+				bool fullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+				SDL_SetWindowFullscreen(window, !fullscreen);
+				MiniwinApp_SetVideoFullscreenChoice(!fullscreen);
 			}
 			else if (
-				p_abortableOnKey && ((event.type == SDL_EVENT_KEY_DOWN && !IsModifierKey(event.key.key)) ||
-									 event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
-									 // Touch: SDL's touch->mouse synthesis is disabled, so taps skip movies
-									 // via their finger events (direct touchscreens only — a trackpad rest
-									 // must not skip).
-									 (event.type == SDL_EVENT_FINGER_DOWN &&
-									  (SDL_GetTouchDeviceType(event.tfinger.touchID) == SDL_TOUCH_DEVICE_DIRECT ||
-									   event.tfinger.touchID == MINIWIN_TOUCH_TEST_DEVICE)))
-			) {
+				p_abortableOnKey && ((event.type == SDL_KEYDOWN && !IsModifierKey(event.key.keysym.sym)) ||
+									 event.type == SDL_MOUSEBUTTONDOWN)) {
 				aborted = true;
 			}
 		}
@@ -279,8 +265,8 @@ int VideoPlayer::Play(Win32GolApp* p_golApp, LPCSTR p_filename, int p_abortableO
 		}
 	}
 
-	if (audio) {
-		SDL_DestroyAudioStream(audio);
+	if (audioDev) {
+		SDL_CloseAudioDevice(audioDev);
 	}
 	Indeo5_Close(decoder);
 	return 1;

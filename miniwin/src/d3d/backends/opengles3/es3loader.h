@@ -6,7 +6,7 @@
 // entry points. The struct/macros are renamed (Es3Functions/ES3_FUNC) so this loader and
 // the GL3 one can coexist in the same static library.
 
-#include <SDL3/SDL.h>
+#include <SDL2/SDL.h>
 #include <stddef.h>
 
 typedef unsigned int GLenum;

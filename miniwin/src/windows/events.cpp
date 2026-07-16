@@ -6,15 +6,11 @@
 #include <miniwin/miniwinapp.h>
 #include <vector>
 
-// SDL frees dynamically allocated event payloads (text input strings) once the
-// original event goes out of scope on the main thread, so the queue keeps its own
-// copy of the text and repoints the event at it when handing it out.
 struct QueuedEvent {
 	SDL_Event m_event;
-	char m_text[64];
 };
 
-static SDL_Mutex* g_queueMutex;
+static SDL_mutex* g_queueMutex;
 static std::vector<QueuedEvent> g_queue;
 static size_t g_queueHead;
 
@@ -46,16 +42,16 @@ MiniwinRenderResolution MiniwinGetRenderResolution()
 // exist yet during the movies), so this one-shot carries the choice into the game's first
 // display init — otherwise the main menu snaps back to the launch mode. 0 = no choice
 // (the zero-initialized default), 1 = windowed, 2 = fullscreen.
-static SDL_AtomicInt g_videoFullscreenChoice;
+static SDL_atomic_t g_videoFullscreenChoice;
 
 void MiniwinApp_SetVideoFullscreenChoice(bool p_fullscreen)
 {
-	SDL_SetAtomicInt(&g_videoFullscreenChoice, p_fullscreen ? 2 : 1);
+	SDL_AtomicSet(&g_videoFullscreenChoice, p_fullscreen ? 2 : 1);
 }
 
 bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen)
 {
-	int value = SDL_SetAtomicInt(&g_videoFullscreenChoice, 0);
+	int value = SDL_AtomicSet(&g_videoFullscreenChoice, 0);
 	if (value == 0) {
 		return false;
 	}
@@ -63,8 +59,8 @@ bool MiniwinApp_ConsumeVideoFullscreenChoice(bool* p_fullscreen)
 	return true;
 }
 
-SDL_AtomicInt g_miniwinHeartbeat;
-SDL_AtomicInt g_miniwinPhase;
+SDL_atomic_t g_miniwinHeartbeat;
+SDL_atomic_t g_miniwinPhase;
 
 // RACERS_WATCHDOG=<ms>: report game-thread stalls longer than the threshold along
 // with the miniwin phase the thread is stuck in.
@@ -78,7 +74,7 @@ static int SDLCALL WatchdogThread(void* p_threshold)
 	for (;;) {
 		SDL_Delay(25);
 
-		int beat = SDL_GetAtomicInt(&g_miniwinHeartbeat);
+		int beat = SDL_AtomicGet(&g_miniwinHeartbeat);
 		Uint64 nowMs = SDL_GetTicks();
 		if (beat != lastBeat) {
 			if (reported) {
@@ -93,7 +89,7 @@ static int SDLCALL WatchdogThread(void* p_threshold)
 			SDL_Log(
 				"[watchdog] game thread stalled %llu ms (phase %d) at t=%llu",
 				(unsigned long long) (nowMs - lastChangeMs),
-				SDL_GetAtomicInt(&g_miniwinPhase),
+				SDL_AtomicGet(&g_miniwinPhase),
 				(unsigned long long) nowMs
 			);
 		}
@@ -134,10 +130,6 @@ void MiniwinApp_PushEvent(const SDL_Event& p_event)
 
 	QueuedEvent entry;
 	entry.m_event = p_event;
-	entry.m_text[0] = '\0';
-	if (p_event.type == SDL_EVENT_TEXT_INPUT && p_event.text.text) {
-		SDL_strlcpy(entry.m_text, p_event.text.text, sizeof(entry.m_text));
-	}
 	g_queue.push_back(entry);
 
 	SDL_UnlockMutex(g_queueMutex);
@@ -146,33 +138,13 @@ void MiniwinApp_PushEvent(const SDL_Event& p_event)
 bool MiniwinApp_PollEvent(SDL_Event& p_event)
 {
 	EnsureWatchdog();
-	SDL_AddAtomicInt(&g_miniwinHeartbeat, 1);
-
-#ifdef __EMSCRIPTEN__
-	// On the web the blocking game loop runs on the main thread, so no SDL_AppEvent callback
-	// fires. Pump SDL events into the queue here (before locking; MiniwinApp_PushEvent takes
-	// the same mutex) so every loop that drains this queue — intro videos, menus, races —
-	// receives input. SDL_PollEvent runs on the main thread, which is where the game lives.
-	{
-		SDL_Event sdlEvent;
-		while (SDL_PollEvent(&sdlEvent)) {
-			MiniwinApp_PushEvent(sdlEvent);
-		}
-	}
-#endif
-
+	SDL_AtomicAdd(&g_miniwinHeartbeat, 1);
 	EnsureQueue();
 	SDL_LockMutex(g_queueMutex);
 
 	bool result = false;
 	if (g_queueHead < g_queue.size()) {
-		static char textBuffer[64];
-		QueuedEvent& entry = g_queue[g_queueHead];
-		p_event = entry.m_event;
-		if (p_event.type == SDL_EVENT_TEXT_INPUT) {
-			SDL_strlcpy(textBuffer, entry.m_text, sizeof(textBuffer));
-			p_event.text.text = textBuffer;
-		}
+		p_event = g_queue[g_queueHead].m_event;
 		g_queueHead++;
 		result = true;
 	}

@@ -1,3 +1,4 @@
+#include <miniwin/touch.h>
 #include "race/playercontrols.h"
 
 #include "decomp.h"
@@ -5,7 +6,6 @@
 #include "race/powerups/racepowerupmanager.h"
 #include "race/racer/racer.h"
 
-#include <miniwin/touch.h>
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(PlayerControls, 0x74)

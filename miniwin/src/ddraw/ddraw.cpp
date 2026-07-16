@@ -236,10 +236,10 @@ HRESULT MiniwinDirectDraw::GetDisplayMode(LPDDSURFACEDESC lpDDSurfaceDesc)
 
 	DWORD width = 640;
 	DWORD height = 480;
-	const SDL_DisplayMode* mode = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
-	if (mode) {
-		width = (DWORD) mode->w;
-		height = (DWORD) mode->h;
+	SDL_DisplayMode mode;
+	if (SDL_GetDesktopDisplayMode(0, &mode) == 0) {
+		width = (DWORD) mode.w;
+		height = (DWORD) mode.h;
 	}
 
 	DWORD size = lpDDSurfaceDesc->dwSize;

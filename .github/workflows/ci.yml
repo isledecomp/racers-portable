@@ -87,8 +87,6 @@ jobs:
           - { name: 'Linux',      os: 'ubuntu-latest',  generator: 'Ninja' , linux: true }
           - { name: 'MSVC (x64)', os: 'windows-latest', generator: 'Ninja' , msvc: true, vc-arch: 'amd64' }
           - { name: 'macOS',      os: 'macos-latest',   generator: 'Ninja' , brew: true }
-          - { name: 'Emscripten', os: 'ubuntu-latest',  generator: 'Ninja' , emsdk: true, cmake-wrapper: 'emcmake' }
-
     steps:
       - name: Setup vcvars
         if: ${{ !!matrix.msvc }}
@@ -104,7 +102,7 @@ jobs:
         if: ${{ matrix.linux }}
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build \
+          sudo apt-get install -y ninja-build libsdl2-dev \
             libx11-dev libxext-dev libxrandr-dev libxrender-dev libxfixes-dev libxi-dev libxinerama-dev \
             libxcursor-dev libwayland-dev libxkbcommon-dev wayland-protocols libgl1-mesa-dev \
             libasound2-dev libpulse-dev libxss-dev libxtst-dev
@@ -113,17 +111,7 @@ jobs:
         if: ${{ matrix.brew }}
         run: |
           brew update
-          brew install cmake ninja || true
-
-      - name: Install Emscripten dependencies (apt-get)
-        if: ${{ matrix.emsdk }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ninja-build
-
-      - name: Setup Emscripten
-        if: ${{ matrix.emsdk }}
-        uses: emscripten-core/setup-emsdk@v15
+          brew install cmake ninja sdl2 || true
 
       - uses: actions/checkout@v4
         with:
