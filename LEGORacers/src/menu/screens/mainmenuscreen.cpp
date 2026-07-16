@@ -80,7 +80,6 @@ void MainMenuScreen::CreateWidgets()
 	CreateTextButton(&m_versusRaceButton, 0x57, 0x42, 0x23);
 	CreateTextButton(&m_timeRaceButton, 0x58, 0x42, 0x24);
 	CreateTextButton(&m_optionsButton, 8, 0x42, 0x26);
-	CreateTextButton(&m_exitButton, 0x59, 0x42, 0x27);
 
 	if (!m_inputManager->GetJoystickCount()) {
 		m_versusRaceButton.Disable(5);
