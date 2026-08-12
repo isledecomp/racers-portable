@@ -349,7 +349,7 @@ void CarShadowRenderState::DrawTriangles4Bpp(TransformedVertex** p_triangle)
 			LegoU8* dst = row + (startX >> 1);
 
 			if (startX & 1) {
-				*dst = static_cast<LegoU8>(*dst | colorHigh);
+				*dst = static_cast<LegoU8>(*dst | color);
 				width--;
 				dst++;
 			}
@@ -361,7 +361,7 @@ void CarShadowRenderState::DrawTriangles4Bpp(TransformedVertex** p_triangle)
 			}
 
 			if (width & 1) {
-				*dst = static_cast<LegoU8>(*dst | color);
+				*dst = static_cast<LegoU8>(*dst | colorHigh);
 			}
 		}
 
