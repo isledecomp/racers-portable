@@ -112,16 +112,8 @@ void RaceRoster::TestRacerCollisions()
 				while (other) {
 					if (other->m_active) {
 						otherModel = other->m_descriptor.m_worldEntity;
-						if (model->GetRadius() < 0.0f) {
-							model->UpdateBounds();
-						}
-
-						modelMinX = model->GetMinX();
-						if (otherModel->GetRadius() < 0.0f) {
-							otherModel->UpdateBounds();
-						}
-
-						if (otherModel->GetMaxX() >= modelMinX) {
+						modelMinX = model->GetBoundsMinX();
+						if (otherModel->GetBoundsMaxX() >= modelMinX) {
 							break;
 						}
 					}
@@ -148,16 +140,8 @@ void RaceRoster::TestRacerCollisions()
 							}
 						}
 
-						if (model->GetRadius() < 0.0f) {
-							model->UpdateBounds();
-						}
-
-						modelMaxX = model->GetMaxX();
-						if (otherModel->GetRadius() < 0.0f) {
-							otherModel->UpdateBounds();
-						}
-
-						if (otherModel->GetMinX() > modelMaxX) {
+						modelMaxX = model->GetBoundsMaxX();
+						if (otherModel->GetBoundsMinX() > modelMaxX) {
 							break;
 						}
 
@@ -217,16 +201,8 @@ void RaceRoster::SortBodyEvents()
 			while (insertAfter) {
 				GolWorldEntity* insertModel = insertAfter->m_descriptor.m_worldEntity;
 
-				if (eventModel->GetRadius() < 0.0f) {
-					eventModel->UpdateBounds();
-				}
-
-				eventMinX = eventModel->GetMinX();
-				if (insertModel->GetRadius() < 0.0f) {
-					insertModel->UpdateBounds();
-				}
-
-				if (insertModel->GetMinX() <= eventMinX) {
+				eventMinX = eventModel->GetBoundsMinX();
+				if (insertModel->GetBoundsMinX() <= eventMinX) {
 					event->m_descriptor.m_previous = insertAfter;
 					event->m_next = insertAfter->m_next;
 					insertAfter->m_next->m_descriptor.m_previous = event;

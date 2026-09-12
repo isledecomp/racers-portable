@@ -17,10 +17,10 @@ CmbModelPartData::CmbModelPartData()
 	m_velocity.m_x = 0.0f;
 	m_velocity.m_y = 0.0f;
 	m_velocity.m_z = 0.0f;
-	m_bounds.m_x = 0.0f;
-	m_bounds.m_y = 0.0f;
-	m_bounds.m_z = 0.0f;
-	m_bounds.m_u = FLT_MAX / 2.0f;
+	m_boundsCenter.m_x = 0.0f;
+	m_boundsCenter.m_y = 0.0f;
+	m_boundsCenter.m_z = 0.0f;
+	m_boundsRadius = FLT_MAX / 2.0f;
 }
 
 // FUNCTION: GOLDP 0x10018670
@@ -56,10 +56,10 @@ void CmbModelPartData::Parse(GolFileParser& p_parser)
 			m_velocity.m_z = p_parser.ReadFloat();
 			break;
 		case CmbModelPartData::e_bounds:
-			m_bounds.m_x = p_parser.ReadFloat();
-			m_bounds.m_y = p_parser.ReadFloat();
-			m_bounds.m_z = p_parser.ReadFloat();
-			m_bounds.m_u = p_parser.ReadFloat();
+			m_boundsCenter.m_x = p_parser.ReadFloat();
+			m_boundsCenter.m_y = p_parser.ReadFloat();
+			m_boundsCenter.m_z = p_parser.ReadFloat();
+			m_boundsRadius = p_parser.ReadFloat();
 			break;
 		default:
 			p_parser.HandleUnexpectedToken(GolFileParser::e_syntaxerror);

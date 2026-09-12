@@ -141,16 +141,8 @@ void CollisionEventQueue::TestBodyPairs()
 				do {
 					otherModel = other->m_descriptor.m_target->GetEntity();
 
-					if (model->GetRadius() < 0.0f) {
-						model->UpdateBounds();
-					}
-
-					maxX = model->GetMaxX();
-					if (otherModel->GetRadius() < 0.0f) {
-						otherModel->UpdateBounds();
-					}
-
-					if (otherModel->GetMinX() <= maxX) {
+					maxX = model->GetBoundsMaxX();
+					if (otherModel->GetBoundsMinX() <= maxX) {
 						if (other->m_active && model->Intersects(otherModel)) {
 							m_callbackData.m_type = Descriptor::c_typeProximity;
 							m_callbackData.m_target0 = event->m_descriptor.m_target;

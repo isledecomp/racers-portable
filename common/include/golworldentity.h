@@ -51,6 +51,24 @@ public:
 
 	void GetBoundsCenter(GolVec3* p_center);
 	LegoFloat GetBoundsRadius();
+	LegoFloat GetBoundsMinX()
+	{
+		if (m_radius < 0.0f) {
+			UpdateBounds();
+		}
+
+		return m_minX;
+	}
+
+	LegoFloat GetBoundsMaxX()
+	{
+		if (m_radius < 0.0f) {
+			UpdateBounds();
+		}
+
+		return m_maxX;
+	}
+
 	void SetBoundsRadius(LegoFloat p_scalar);
 	void SetBoundsCenter(const GolVec3& p_center);
 	LegoFloat GetRadius() const { return m_radius; }

@@ -20,6 +20,11 @@ public:
 	void DecodeRleRow(LegoU8* p_src, LegoU8* p_dst);
 
 private:
+	enum RlePacketFlags {
+		c_rleCountMask = 0x7f,
+		c_rleRepeatFlag = 0x80
+	};
+
 	LegoU32 m_identificationFieldSize; // 0x5b0
 	LegoU32 m_colorMapType;            // 0x5b4
 	LegoS32 m_imageType;               // 0x5b8

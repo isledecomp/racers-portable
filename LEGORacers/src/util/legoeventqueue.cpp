@@ -32,13 +32,9 @@ void LegoEventQueue::Initialize(LegoU32 p_count)
 		GOL_FATALERROR(c_golErrorOutOfMemory);
 	}
 
-	LegoU32 linkCount = p_count;
 	m_freeList = m_events;
-	linkCount--;
-	if (linkCount > 0) {
-		for (LegoU32 i = 0; i < linkCount; i++) {
-			m_events[i].m_next = &m_events[i + 1];
-		}
+	for (LegoU32 i = 0; i < p_count - 1; i++) {
+		m_events[i].m_next = &m_events[i + 1];
 	}
 
 	m_events[p_count - 1].m_next = NULL;
@@ -196,16 +192,8 @@ void ProximityEventQueue::TestPairs()
 				do {
 					otherModel = other->m_descriptor.m_worldEntity;
 
-					if (model->GetRadius() < 0.0f) {
-						model->UpdateBounds();
-					}
-
-					maxX = model->GetMaxX();
-					if (otherModel->GetRadius() < 0.0f) {
-						otherModel->UpdateBounds();
-					}
-
-					if (otherModel->GetMinX() <= maxX) {
+					maxX = model->GetBoundsMaxX();
+					if (otherModel->GetBoundsMinX() <= maxX) {
 						if (other->m_active && model->Intersects(otherModel)) {
 							m_callbackData.m_type = Descriptor::c_typeProximity;
 							m_callbackData.m_worldEntity0 = model;

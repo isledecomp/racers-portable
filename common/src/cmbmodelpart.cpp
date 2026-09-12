@@ -158,9 +158,9 @@ void CmbModelPart::ParseParts(GolFileParser& p_parser)
 void CmbModelPart::MirrorY()
 {
 	for (LegoU32 i = 0; i < m_partCount; i++) {
-		GolVec4 bounds = m_partData[i].m_bounds;
-		bounds.m_y = -bounds.m_y;
-		m_partData[i].m_bounds = bounds;
+		GolVec3 center = m_partData[i].GetBoundsCenter();
+		center.m_y = -center.m_y;
+		m_partData[i].SetBounds(center, m_partData[i].GetBoundsRadius());
 
 		GolVec3 position = m_partData[i].m_velocity;
 		position.m_y = -position.m_y;

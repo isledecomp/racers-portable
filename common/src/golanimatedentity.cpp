@@ -579,25 +579,21 @@ void GolAnimatedEntity::ComputeBoundsFromModel(LegoU32 p_index)
 	LegoFloat radius;
 	LegoFloat scale;
 	if (m_flags & c_flagPartAnimation) {
-		CmbModelPartData* partData = m_modelParts[p_index]->GetPartData();
-		const GolVec4& bounds = partData[m_currentPartIndex].GetBounds();
-		center.m_x = bounds.m_x;
-		center.m_y = bounds.m_y;
-		center.m_z = bounds.m_z;
-		radius = bounds.m_u;
+		CmbModelPart* modelPart = m_modelParts[p_index];
+		const CmbModelPartData& activePart = modelPart->GetPartData()[m_currentPartIndex];
+		center = activePart.GetBoundsCenter();
+		radius = activePart.GetBoundsRadius();
 
 		if (m_flags & c_flagPartTransition) {
-			const GolVec4& bounds2 = partData[m_queuedPartIndex].GetBounds();
-			GolVec3 center2;
-			center2.m_x = bounds2.m_x;
-			center2.m_y = bounds2.m_y;
-			center2.m_z = bounds2.m_z;
+			const CmbModelPartData& queuedPart = modelPart->GetPartData()[m_queuedPartIndex];
+			GolVec3 center2 = queuedPart.GetBoundsCenter();
+			LegoFloat radius2 = queuedPart.GetBoundsRadius();
 
 			center.m_x = (center.m_x + center2.m_x) * 0.5f;
 			center.m_y = (center.m_y + center2.m_y) * 0.5f;
 			center.m_z = (center.m_z + center2.m_z) * 0.5f;
-			if (radius < bounds2.m_u) {
-				radius = bounds2.m_u;
+			if (radius < radius2) {
+				radius = radius2;
 			}
 
 			LegoFloat deltaX = center.m_x - center2.m_x;
@@ -614,7 +610,15 @@ void GolAnimatedEntity::ComputeBoundsFromModel(LegoU32 p_index)
 		scale = m_scale;
 	}
 
-	center *= scale;
+	LegoFloat x = scale;
+	x *= center.m_x;
+	center.m_x = x;
+	LegoFloat y = center.m_y;
+	y *= scale;
+	center.m_y = y;
+	LegoFloat z = center.m_z;
+	z *= scale;
+	center.m_z = z;
 
 	GolVec3 position;
 	LocalToWorld(center, &position);

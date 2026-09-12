@@ -26,7 +26,13 @@ public:
 
 	LegoFloat GetMsPerFrame() const { return m_msPerFrame; }
 	const GolVec3& GetVelocity() const { return m_velocity; }
-	const GolVec4& GetBounds() const { return m_bounds; }
+	const GolVec3& GetBoundsCenter() const { return m_boundsCenter; }
+	LegoFloat GetBoundsRadius() const { return m_boundsRadius; }
+	void SetBounds(const GolVec3& p_boundsCenter, LegoFloat p_boundsRadius)
+	{
+		m_boundsCenter = p_boundsCenter;
+		m_boundsRadius = p_boundsRadius;
+	}
 	LegoU32 GetTrackIndex() const { return m_trackIndex; }
 	LegoU16 GetFrameCount() const { return m_frameCount; }
 	LegoU16 GetLoopFrameCount() const { return m_loopFrameCount; }
@@ -35,7 +41,8 @@ public:
 private:
 	LegoFloat m_msPerFrame;   // 0x00
 	GolVec3 m_velocity;       // 0x04
-	GolVec4 m_bounds;         // 0x10
+	GolVec3 m_boundsCenter;   // 0x10
+	LegoFloat m_boundsRadius; // 0x1c
 	LegoU32 m_trackIndex;     // 0x20
 	LegoU16 m_frameCount;     // 0x24
 	LegoU16 m_loopFrameCount; // 0x26

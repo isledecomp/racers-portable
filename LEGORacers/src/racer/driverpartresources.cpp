@@ -182,43 +182,35 @@ void DriverPartResources::ReplaceModelGroupMaterialIndex(
 void DriverPartResources::NormalizeHeadGroupOrder()
 {
 	LegoS32 modelCount = m_partResource->GetAnimatedEntityCount();
-	LegoS32 modelIndex = 0;
+	for (LegoS32 modelIndex = 0; modelIndex < modelCount; modelIndex++) {
+		GolAnimatedEntity* resourceModel = &m_partResource->GetAnimatedEntities()[modelIndex];
+		MaterialTable* materialTable = resourceModel->GetMaterialTable(0);
+		if (materialTable == NULL) {
+			materialTable = resourceModel->GetModel(0)->GetMaterialTable();
+		}
 
-	if (modelCount > 0) {
-		LegoS32 remainingModels = modelCount;
-		do {
-			GolAnimatedEntity* resourceModel = &m_partResource->GetAnimatedEntities()[modelIndex];
-			MaterialTable* materialTable = resourceModel->GetMaterialTable(0);
-			if (materialTable == NULL) {
-				materialTable = resourceModel->GetModel(0)->GetMaterialTable();
-			}
+		LegoS32 materialIndex = 1;
+		LegoS32 materialCount = materialTable->m_count;
+		if (materialCount > 1) {
+			do {
+				GolMaterial* material = static_cast<GolMaterial*>(materialTable->GetEntry(materialIndex));
+				GolMaterial::NameRecord materialName;
+				materialName = material->GetNameRecord();
 
-			LegoS32 materialIndex = 1;
-			LegoS32 materialCount = materialTable->m_count;
-			if (materialCount > 1) {
-				do {
-					GolMaterial* material = static_cast<GolMaterial*>(materialTable->GetEntry(materialIndex));
-					GolMaterial::NameRecord materialName;
-					materialName = material->GetNameRecord();
-
-					if (material != NULL) {
-						if (::strncmp(materialName.m_name, "face", sizeof(GolName)) == 0) {
-							GolMaterial* firstMaterial = static_cast<GolMaterial*>(materialTable->GetEntry(0));
-							materialTable->SetEntry(0, material);
-							materialTable->SetEntry(materialIndex, firstMaterial);
-							ReplaceModelGroupMaterialIndex(resourceModel, materialIndex, 0xffff);
-							ReplaceModelGroupMaterialIndex(resourceModel, 0, materialIndex);
-							ReplaceModelGroupMaterialIndex(resourceModel, 0xffff, 0);
-						}
+				if (material != NULL) {
+					if (::strncmp(materialName.m_name, "face", sizeof(GolName)) == 0) {
+						GolMaterial* firstMaterial = static_cast<GolMaterial*>(materialTable->GetEntry(0));
+						materialTable->SetEntry(0, material);
+						materialTable->SetEntry(materialIndex, firstMaterial);
+						ReplaceModelGroupMaterialIndex(resourceModel, materialIndex, 0xffff);
+						ReplaceModelGroupMaterialIndex(resourceModel, 0, materialIndex);
+						ReplaceModelGroupMaterialIndex(resourceModel, 0xffff, 0);
 					}
+				}
 
-					materialIndex++;
-				} while (materialIndex < materialCount);
-			}
-
-			modelIndex++;
-			remainingModels--;
-		} while (remainingModels != 0);
+				materialIndex++;
+			} while (materialIndex < materialCount);
+		}
 	}
 }
 

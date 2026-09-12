@@ -275,8 +275,8 @@ void GolTgaFile::LoadSurface(GolSurface* p_texture, LegoU32 p_flags, ColorRGBA* 
 void GolTgaFile::DecodeRleRow(LegoU8* p_src, LegoU8* p_dst)
 {
 	LegoU32 bytesPerPixel = m_format.m_bitsPerPixel;
-	LegoU32 pixelCount = 0;
 	LegoU32 dstByteCount = 0;
+	LegoU32 pixelCount = 0;
 	LegoU32 dstOffset = 0;
 
 	bytesPerPixel += 7;
@@ -284,13 +284,13 @@ void GolTgaFile::DecodeRleRow(LegoU8* p_src, LegoU8* p_dst)
 
 	while (pixelCount < m_width) {
 		LegoU32 packet = *p_src++;
-		if (pixelCount + (packet & 0x7f) + 1 > m_width) {
+		if (pixelCount + (packet & c_rleCountMask) + 1 > m_width) {
 			return;
 		}
 
-		if (packet & 0x80) {
+		if (packet & c_rleRepeatFlag) {
 			LegoU32 startOffset = dstOffset;
-			packet &= 0x7f;
+			packet &= ~c_rleRepeatFlag;
 			pixelCount += packet + 1;
 			dstByteCount += (packet + 1) * bytesPerPixel;
 
@@ -298,7 +298,7 @@ void GolTgaFile::DecodeRleRow(LegoU8* p_src, LegoU8* p_dst)
 				p_dst[dstOffset++] = *p_src++;
 			}
 
-			for (; packet > 0; packet--) {
+			while (packet-- != 0) {
 				for (LegoU32 i = 0; i < bytesPerPixel; i++) {
 					p_dst[dstOffset++] = p_dst[startOffset + i];
 				}
