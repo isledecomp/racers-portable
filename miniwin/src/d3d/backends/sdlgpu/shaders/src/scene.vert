@@ -22,11 +22,14 @@ layout(location = 2) out vec2 vUV;
 void main()
 {
 	// D3D TL vertices are in screen space with rhw = 1/w. Reconstruct clip space so the
-	// hardware perspective-corrects colors/UVs exactly like Direct3D 6 did.
+	// hardware perspective-corrects colors/UVs exactly like Direct3D 6 did. SDL_GPU's
+	// clip-space depth runs from 0 to w, like Direct3D's, so sz (0..1) passes straight
+	// through; the GL backends' (sz * 2 - 1) remap would push sz < 0.5 below 0, where the
+	// depth clamp flattens it.
 	float w = 1.0 / aPos.w;
 	float x = (aPos.x * 2.0 / uViewport.x - 1.0) * w;
 	float y = (1.0 - aPos.y * 2.0 / uViewport.y) * w;
-	float z = (aPos.z * 2.0 - 1.0) * w;
+	float z = aPos.z * w;
 	gl_Position = vec4(x, y, z, w);
 	vColor = aColor.bgra;
 	vSpecular = aSpecular.bgra;
