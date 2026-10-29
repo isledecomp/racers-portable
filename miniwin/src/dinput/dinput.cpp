@@ -729,6 +729,20 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 		DIJOYSTATE2* state = (DIJOYSTATE2*) lpvData;
 		state->lX = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTX));
 		state->lY = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_LEFTY));
+
+		// D-pad input overrides the left stick independently on each axis.
+		// Neither or both opposing directions leave that axis's analog value intact.
+		bool left = SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT);
+		bool right = SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT);
+		bool up = SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP);
+		bool down = SDL_GetGamepadButton(m_gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN);
+		if (left != right) {
+			state->lX = left ? m_rangeMin : m_rangeMax;
+		}
+		if (up != down) {
+			state->lY = up ? m_rangeMin : m_rangeMax;
+		}
+
 		state->lRx = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTX));
 		state->lRy = ScaleAxis(SDL_GetGamepadAxis(m_gamepad, SDL_GAMEPAD_AXIS_RIGHTY));
 
@@ -743,6 +757,12 @@ struct MiniwinInputDevice : public IDirectInputDevice2A {
 		state->rgdwPOV[3] = 0xFFFFFFFF;
 
 		for (int i = 0; i < 16; i++) {
+			if (i == SDL_GAMEPAD_BUTTON_DPAD_UP || i == SDL_GAMEPAD_BUTTON_DPAD_DOWN ||
+				i == SDL_GAMEPAD_BUTTON_DPAD_LEFT || i == SDL_GAMEPAD_BUTTON_DPAD_RIGHT) {
+				// D-pad directions already drive lX/lY. Suppress all four button slots
+				// so menu navigation cannot also select an item.
+				continue;
+			}
 			state->rgbButtons[i] = SDL_GetGamepadButton(m_gamepad, (SDL_GamepadButton) i) ? 0x80 : 0x00;
 		}
 
