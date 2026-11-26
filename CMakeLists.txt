@@ -16,7 +16,7 @@ if (EMSCRIPTEN)
     -sALLOW_MEMORY_GROWTH=1
     -sINITIAL_MEMORY=128mb
     -sMAXIMUM_MEMORY=2gb
-    -sUSE_PTHREADS=1
+    -pthread
     -sPROXY_TO_PTHREAD=1
     -sOFFSCREENCANVAS_SUPPORT=1
     -sPTHREAD_POOL_SIZE_STRICT=0
@@ -27,6 +27,7 @@ if (EMSCRIPTEN)
     # Blocking game loop yields to the browser each frame via asyncify (SDL's
     # SwapWindow/SDL_Delay call emscripten_sleep).
     -sASYNCIFY=1
+    -g2
     -gsource-map
   )
   set(SDL_PTHREADS ON CACHE BOOL "Enable SDL pthreads" FORCE)

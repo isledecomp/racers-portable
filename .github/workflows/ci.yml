@@ -124,6 +124,8 @@ jobs:
       - name: Setup Emscripten
         if: ${{ matrix.emsdk }}
         uses: emscripten-core/setup-emsdk@v15
+        with:
+          version: 6.0.10
 
       - uses: actions/checkout@v4
         with:
