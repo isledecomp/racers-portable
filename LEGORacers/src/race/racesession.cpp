@@ -854,7 +854,6 @@ void RaceSession::LoadRouteRecords(LegoBool32 p_mirror)
 	LegoU32 loaded = FALSE;
 	LegoU32 i;
 	LegoU32 type;
-	RaceRouteRecord* current = m_routeRecords;
 
 	for (i = 0; i < static_cast<LegoU32>(m_context->m_racerCount); i++) {
 		if (m_context->m_playerSetupSlots[i].m_slotState == 2 || m_demoMode) {
@@ -919,11 +918,9 @@ void RaceSession::LoadRouteRecords(LegoBool32 p_mirror)
 				}
 				fileName[5] = static_cast<LegoChar>(index + '0');
 
-				current->Load(fileName, m_context->m_useBinaryFiles, p_mirror);
+				m_routeRecords[i].Load(fileName, m_context->m_useBinaryFiles, p_mirror);
 			}
 		}
-
-		current++;
 	}
 
 	for (i = 0; i < sizeOfArray(m_routeRecords); i++) {
@@ -936,19 +933,20 @@ void RaceSession::LoadRouteRecords(LegoBool32 p_mirror)
 		::strcpy(fileName, "r1_f_0");
 		::strcat(fileName, m_context->m_useBinaryFiles ? ".rrb" : ".rrf");
 
-		LegoBool32 foundFallback = GolStream::FindFile(fileName) == GolStream::e_ioSuccess;
-		if (!foundFallback) {
-			fileName[3] = 'm';
-			foundFallback = GolStream::FindFile(fileName) == GolStream::e_ioSuccess;
-
-			if (!foundFallback) {
-				fileName[3] = 's';
-				foundFallback = GolStream::FindFile(fileName) == GolStream::e_ioSuccess;
-			}
-		}
-
-		if (foundFallback) {
+		if (GolStream::FindFile(fileName) == GolStream::e_ioSuccess) {
 			m_routeRecords[0].Load(fileName, m_context->m_useBinaryFiles, p_mirror);
+		}
+		else {
+			fileName[3] = 'm';
+			if (GolStream::FindFile(fileName) == GolStream::e_ioSuccess) {
+				m_routeRecords[0].Load(fileName, m_context->m_useBinaryFiles, p_mirror);
+			}
+			else {
+				fileName[3] = 's';
+				if (GolStream::FindFile(fileName) == GolStream::e_ioSuccess) {
+					m_routeRecords[0].Load(fileName, m_context->m_useBinaryFiles, p_mirror);
+				}
+			}
 		}
 	}
 }
@@ -981,12 +979,11 @@ void RaceSession::LoadRaceContent(LegoBool32 p_mirror)
 
 	DrawLoadProgress(0.45f);
 
-	MabMaterialAnimation* materialAnimation = m_materialAnimationDatabase->GetMaterialAnimation(0);
 	m_sharedParticleAnimation.Load(
 		4,
 		m_golExport,
 		m_renderer,
-		materialAnimation,
+		m_materialAnimationDatabase->GetMaterialAnimation(0),
 		m_sharedParticleAnimationName,
 		m_context->m_useBinaryFiles
 	);
@@ -1038,7 +1035,7 @@ void RaceSession::LoadRaceContent(LegoBool32 p_mirror)
 
 	LegoU32 racerIndex;
 	RaceRouteRecord* routeRecord = m_routeRecords;
-	for (racerIndex = 0; racerIndex < m_context->m_racerCount; racerIndex++) {
+	for (racerIndex = 0; racerIndex < racerParams.m_racerCount; racerIndex++) {
 		LegoRacers::Context::PlayerSetupSlot* slot = &m_context->m_playerSetupSlots[racerIndex];
 		racerParams.m_slots[racerIndex] = slot;
 
@@ -1052,12 +1049,8 @@ void RaceSession::LoadRaceContent(LegoBool32 p_mirror)
 		routeRecord++;
 	}
 
-	if (m_context->m_racerCount < sizeOfArray(racerParams.m_slots)) {
-		::memset(
-			&racerParams.m_slots[m_context->m_racerCount],
-			0,
-			(sizeOfArray(racerParams.m_slots) - m_context->m_racerCount) * sizeof(racerParams.m_slots[0])
-		);
+	for (racerIndex = racerParams.m_racerCount; racerIndex < sizeOfArray(racerParams.m_slots); racerIndex++) {
+		racerParams.m_slots[racerIndex] = NULL;
 	}
 
 	m_raceState.CreateRacers(&racerParams, &racerContext, m_context->m_useBinaryFiles);
@@ -1069,14 +1062,15 @@ void RaceSession::LoadRaceContent(LegoBool32 p_mirror)
 	DrawLoadProgress(0.6f);
 
 	hashTable = g_hashTable;
+	LegoChar* gameDataDirectory = m_context->m_gameDataDirectory;
 	if (hashTable) {
-		hashTable->SetCurrentEntry(hashTable->AddString(m_context->m_gameDataDirectory));
+		hashTable->SetCurrentEntry(hashTable->AddString(gameDataDirectory));
 	}
 
 	for (racerIndex = 0; racerIndex < m_context->m_racerCount; racerIndex++) {
 		if (m_context->m_playerSetupSlots[racerIndex].m_slotState == 0) {
-			Racer* racer = &m_raceState.GetRacers()[racerIndex];
 			RaceCameraController* cameraController = &m_cameraControllers[racerIndex];
+			Racer* racer = &m_raceState.GetRacers()[racerIndex];
 			m_raceState.m_playerRacers[racerIndex] = racer;
 
 			cameraController->SetRacer(racer);
@@ -1274,8 +1268,9 @@ void RaceSession::LoadRaceContent(LegoBool32 p_mirror)
 	DrawLoadProgress(0.97f);
 
 	hashTable = g_hashTable;
+	gameDataDirectory = m_context->m_gameDataDirectory;
 	if (hashTable) {
-		hashTable->SetCurrentEntry(hashTable->AddString(m_context->m_gameDataDirectory));
+		hashTable->SetCurrentEntry(hashTable->AddString(gameDataDirectory));
 	}
 
 	if (m_timeRaceManager) {
@@ -1475,29 +1470,29 @@ void RaceSession::StartIntroCamera()
 // FUNCTION: LEGORACERS 0x004343e0
 void RaceSession::InitializeInput()
 {
-	RaceSession* session = this;
-	InputEventQueue* inputEvents = &session->m_inputEvents;
+	PlayerControls::InputState* inputSink = NULL;
+	InputEventQueue* inputEvents = &m_inputEvents;
 	inputEvents->Allocate(32);
 
-	MouseDevice* mouse = session->m_inputManager->GetMouse();
+	MouseDevice* mouse = m_inputManager->GetMouse();
 	if (mouse) {
 		mouse->SetCallback(inputEvents);
 		mouse->SetExclusiveMode();
 		mouse->Acquire();
 	}
 
-	KeyboardDevice* keyboard = session->m_inputManager->GetKeyboard();
+	KeyboardDevice* keyboard = m_inputManager->GetKeyboard();
 	if (keyboard) {
-		session->m_inputRouter.Initialize(keyboard, inputEvents);
-		session->m_inputRouter.AcquireDevice();
+		m_inputRouter.Initialize(keyboard, inputEvents);
+		m_inputRouter.AcquireDevice();
 	}
 
 	LegoU32 playerCount;
-	if (session->m_demoMode) {
+	if (m_demoMode) {
 		playerCount = 2;
 	}
 	else {
-		playerCount = session->m_context->m_playerCount;
+		playerCount = m_context->m_playerCount;
 	}
 
 	// [library:input] Touch stands down for the whole session when it has more than
@@ -1505,130 +1500,121 @@ void RaceSession::InitializeInput()
 	MiniwinTouch_SetLocalPlayerCount(playerCount);
 
 	if (playerCount > 0) {
-		PlayerControls* controls = session->m_playerControls;
-		Racer** racer = session->m_raceState.m_playerRacers;
+		PlayerControls* controls = m_playerControls;
+		Racer** racer = m_raceState.m_playerRacers;
 		LegoU32 playerIndex = 0;
 
 		do {
 			LegoBool32 bindingAcquired = FALSE;
-			PlayerControls::InputState* inputSink = NULL;
 
-			if (!session->m_demoMode) {
+			if (!m_demoMode) {
 				controls->Initialize(*racer, inputEvents);
 				inputSink = &controls->m_input;
 			}
 
-			InputBindingState::Entry* binding = &session->m_context->m_inputBindings[playerIndex];
-			if (binding->m_deviceType == DIDEVTYPE_JOYSTICK && binding->m_deviceId < 16) {
-				JoystickDevice* joystick = session->m_inputManager->FindJoystickByDeviceId(binding->m_deviceId);
-				if (joystick && joystick->GetDeviceSubType() == binding->m_deviceSubType) {
+			if (m_context->m_inputBindings[playerIndex].m_deviceType == DIDEVTYPE_JOYSTICK &&
+				m_context->m_inputBindings[playerIndex].m_deviceId < 16) {
+				JoystickDevice* joystick =
+					m_inputManager->FindJoystickByDeviceId(m_context->m_inputBindings[playerIndex].m_deviceId);
+				if (joystick &&
+					joystick->GetDeviceSubType() == m_context->m_inputBindings[playerIndex].m_deviceSubType) {
 					joystick->SetCallback(inputEvents);
 					bindingAcquired = TRUE;
 					joystick->Acquire();
 
-					if (!session->m_demoMode) {
-						if (binding->m_deviceSubType == 4) {
+					if (!m_demoMode) {
+						if (m_context->m_inputBindings[playerIndex].m_deviceSubType == 4) {
 							joystick->SetAxisButtonEventsEnabled(TRUE);
 						}
 
-						LegoU32 event = binding->m_events[0];
-						DirectInputDevice* source;
+						LegoU32 event = m_context->m_inputBindings[playerIndex].m_events[0];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 0);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 0);
 						}
-						inputSink->SetBinding(source, event, 0);
 
-						event = binding->m_events[1];
+						event = m_context->m_inputBindings[playerIndex].m_events[1];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 1);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 1);
 						}
-						inputSink->SetBinding(source, event, 1);
 
-						event = binding->m_events[2];
+						event = m_context->m_inputBindings[playerIndex].m_events[2];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 2);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 2);
 						}
-						inputSink->SetBinding(source, event, 2);
 
-						event = binding->m_events[3];
+						event = m_context->m_inputBindings[playerIndex].m_events[3];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 3);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 3);
 						}
-						inputSink->SetBinding(source, event, 3);
 
-						event = binding->m_events[4];
+						event = m_context->m_inputBindings[playerIndex].m_events[4];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 4);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 4);
 						}
-						inputSink->SetBinding(source, event, 4);
 
-						event = binding->m_events[5];
+						event = m_context->m_inputBindings[playerIndex].m_events[5];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 5);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 5);
 						}
-						inputSink->SetBinding(source, event, 5);
 
-						event = binding->m_events[6];
+						event = m_context->m_inputBindings[playerIndex].m_events[6];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 6);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 6);
 						}
-						inputSink->SetBinding(source, event, 6);
 
-						event = binding->m_events[7];
+						event = m_context->m_inputBindings[playerIndex].m_events[7];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 7);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 7);
 						}
-						inputSink->SetBinding(source, event, 7);
 
-						event = binding->m_events[8];
+						event = m_context->m_inputBindings[playerIndex].m_events[8];
 						if ((event & InputDevice::c_sourceCharacter) == InputDevice::c_sourceKeyboard && keyboard) {
-							source = keyboard;
+							inputSink->SetBinding(keyboard, event, 8);
 						}
 						else {
-							source = joystick;
+							inputSink->SetBinding(joystick, event, 8);
 						}
-						inputSink->SetBinding(source, event, 8);
 
 						inputSink->AcquireDevices();
 					}
 				}
 			}
 
-			if (!session->m_demoMode) {
-				if (binding->m_deviceType == DIDEVTYPE_KEYBOARD && keyboard) {
-					inputSink->SetBinding(keyboard, binding->m_events[0], 0);
-					inputSink->SetBinding(keyboard, binding->m_events[1], 1);
-					inputSink->SetBinding(keyboard, binding->m_events[2], 2);
-					inputSink->SetBinding(keyboard, binding->m_events[3], 3);
-					inputSink->SetBinding(keyboard, binding->m_events[4], 4);
-					inputSink->SetBinding(keyboard, binding->m_events[5], 5);
-					inputSink->SetBinding(keyboard, binding->m_events[6], 6);
-					inputSink->SetBinding(keyboard, binding->m_events[7], 7);
-					inputSink->SetBinding(keyboard, binding->m_events[8], 8);
+			if (!m_demoMode) {
+				if (m_context->m_inputBindings[playerIndex].m_deviceType == DIDEVTYPE_KEYBOARD && keyboard) {
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[0], 0);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[1], 1);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[2], 2);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[3], 3);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[4], 4);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[5], 5);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[6], 6);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[7], 7);
+					inputSink->SetBinding(keyboard, m_context->m_inputBindings[playerIndex].m_events[8], 8);
 					bindingAcquired = TRUE;
 				}
 
@@ -1638,8 +1624,8 @@ void RaceSession::InitializeInput()
 					GOL_FATALERROR_MESSAGE("Could not acquire controller for player");
 				}
 
-				session->m_forceFeedback[playerIndex].Initialize(inputSink->m_devices[4]);
-				(*racer)->m_forceFeedback = &session->m_forceFeedback[playerIndex];
+				m_forceFeedback[playerIndex].Initialize(inputSink->m_devices[4]);
+				(*racer)->m_forceFeedback = &m_forceFeedback[playerIndex];
 				controls->DetectAnalogDevice();
 			}
 
@@ -1650,7 +1636,7 @@ void RaceSession::InitializeInput()
 		} while (playerCount);
 	}
 
-	session->m_inputManager->PollDevices(0);
+	m_inputManager->PollDevices(0);
 	inputEvents->ClearQueue();
 }
 
@@ -2541,6 +2527,15 @@ void RaceSession::BindSurfaceMaterials(LegoBool32 p_mirror)
 	}
 }
 
+inline static void* FindSurfaceName(const SurfaceTable& p_table, const LegoChar* p_name)
+{
+	if (p_table.GetNameEntries() == NULL) {
+		return NULL;
+	}
+
+	return p_table.GetName(p_name);
+}
+
 // FUNCTION: LEGORACERS 0x00435e70
 void RaceSession::BindCheckpointMaterials()
 {
@@ -2557,21 +2552,16 @@ void RaceSession::BindCheckpointMaterials()
 				GolMaterial* material = materials->GetMaterial(materialIndex);
 				GolMaterial::NameRecord materialName = material->GetNameRecord();
 				if (materialName.m_name[0] >= '0' && materialName.m_name[0] <= '9') {
-					material->SetUserData(m_checkpointGraph.GetCheckpoint(checkpointIndex));
+					void* checkpoint = m_checkpointGraph.GetCheckpoint(checkpointIndex);
 					material->EnableFlagBit18();
+					material->SetUserData(checkpoint);
 					checkpointIndex++;
 				}
 				else {
-					void* materialPosition;
-					if (m_surfaceTable.GetNameEntries() == NULL) {
-						materialPosition = NULL;
-					}
-					else {
-						materialPosition = m_surfaceTable.GetName(materialName.m_name);
-					}
+					void* materialPosition = FindSurfaceName(m_surfaceTable, materialName.m_name);
 
-					material->SetUserData(materialPosition);
 					material->EnableFlagBit18();
+					material->SetUserData(materialPosition);
 				}
 
 				materialIndex++;
@@ -2590,10 +2580,13 @@ void RaceSession::TakeScreenshot()
 
 	if (g_hashTable) {
 		currentEntry = g_hashTable->GetCurrentEntry();
-		g_hashTable->SetCurrentEntryFromString(NULL);
 	}
 	else {
 		currentEntry = NULL;
+	}
+
+	if (g_hashTable) {
+		g_hashTable->SetCurrentEntryFromString(NULL);
 	}
 
 	for (screenshotIndex = 0; screenshotIndex <= c_maxScreenshotIndex; screenshotIndex++) {

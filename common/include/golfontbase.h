@@ -24,10 +24,7 @@ public:
 		c_flagBmpSource = 0x0008,
 		c_flagTgaSource = 0x0010,
 		c_flagColorKeyed = 0x0020,
-		c_flagBit11 = 0x0800,
-		c_allFlags = 0xffff,
-		c_flagsWithoutBmp = c_allFlags & ~c_flagBmpSource,
-		c_flagsWithoutTga = c_allFlags & ~c_flagTgaSource
+		c_flagBit11 = 0x0800
 	};
 
 	GolFontBase();
@@ -50,6 +47,8 @@ public:
 	void ScanGlyphs(const LegoChar* p_name);
 	void ReadSeparatorSignature(LegoU32* p_rowSignature, LegoU8* p_pixels, LegoU32 p_pitch);
 	LegoBool32 IsSeparatorColumn(LegoU32* p_rowSignature, LegoU8* p_pixels, LegoU32 p_pitch, LegoBool32 p_highNibble);
+	LegoU32 SkipSeparatorColumns(LegoU32* p_rowSignature, LegoU8* p_pixels, LegoU32 p_pitch, LegoS32 p_x);
+	LegoU32 SkipGlyphColumns(LegoU32* p_rowSignature, LegoU8* p_pixels, LegoU32 p_pitch, LegoS32 p_x);
 	LegoU32 PackGlyphTextures(GolD3DRenderDevice* p_renderer, GolSurfaceFormat* p_textureFormat);
 	void CopyGlyphsToTextures();
 	void DrawString(GolString*, GolRenderDevice*, LegoS32, LegoS32, LegoFloat, LegoFloat, Rect*, undefined4);

@@ -23,6 +23,10 @@ typedef DWORD D3DVIEWPORTHANDLE;
 #define D3DRGBA(r, g, b, a)                                                                                            \
 	RGBA_MAKE((DWORD) ((r) * 255.f), (DWORD) ((g) * 255.f), (DWORD) ((b) * 255.f), (DWORD) ((a) * 255.f))
 #define D3DRGB(r, g, b) D3DRGBA(r, g, b, 1.f)
+#define RGBA_GETALPHA(rgb) ((rgb) >> 24)
+#define RGBA_GETRED(rgb) (((rgb) >> 16) & 0xff)
+#define RGBA_GETGREEN(rgb) (((rgb) >> 8) & 0xff)
+#define RGBA_GETBLUE(rgb) ((rgb) & 0xff)
 
 // --- Basic structs ---
 struct D3DRECT {
@@ -215,6 +219,7 @@ typedef D3DDEVICEDESC* LPD3DDEVICEDESC;
 #define D3DPTEXTURECAPS_PERSPECTIVE 0x00000001
 #define D3DPTEXTURECAPS_ALPHA 0x00000004
 #define D3DPTEXTURECAPS_TRANSPARENCY 0x00000008
+#define D3DPTEXTURECAPS_SQUAREONLY 0x00000020
 
 #define D3DPTADDRESSCAPS_WRAP 0x00000001
 

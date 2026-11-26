@@ -134,13 +134,12 @@ void RaceTimerList::Resource::OnEvent(LegoEventQueue::CallbackData* p_data)
 		if (m_flags & c_randomizeOffDuration) {
 			if (duration > c_randomTableMask) {
 				g_randomTableIndex = (g_randomTableIndex + 1) & c_randomTableMask;
-				Schedule(g_randomTable[g_randomTableIndex] * (duration / c_randomTableMask));
-				m_flags &= ~c_active;
-				return;
+				duration = g_randomTable[g_randomTableIndex] * (duration / c_randomTableMask);
 			}
-
-			g_randomTableIndex = (g_randomTableIndex + 1) & c_randomTableMask;
-			duration = g_randomTable[g_randomTableIndex] % duration;
+			else {
+				g_randomTableIndex = (g_randomTableIndex + 1) & c_randomTableMask;
+				duration = g_randomTable[g_randomTableIndex] % duration;
+			}
 		}
 
 		Schedule(duration);
@@ -253,10 +252,10 @@ void RaceTimerList::Load(
 		parser->AssertNextTokenIs(static_cast<GolFileParser::ParserTokenType>(TibTxtParser::e_timer));
 		parser->AssertNextTokenIs(GolFileParser::e_leftCurly);
 
-		LegoU32 flags = 0;
-		LegoU32 onDuration = 0;
-		LegoU32 offDuration = 0;
 		LegoU32 initialDelay = 0;
+		LegoU32 onDuration = 0;
+		LegoU32 flags = 0;
+		LegoU32 offDuration = 0;
 		LegoS32 eventIndex = -1;
 
 		GolFileParser::ParserTokenType token = parser->GetNextToken();

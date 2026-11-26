@@ -92,9 +92,10 @@ void PlayerControls::Reset()
 // FUNCTION: LEGORACERS 0x00430120
 void PlayerControls::UpdateSteering(LegoU32 p_elapsedMs)
 {
-	LegoFloat elapsedSeconds = static_cast<LegoFloat>(static_cast<LegoS32>(p_elapsedMs)) * 0.001f;
+	LegoFloat elapsedSeconds = static_cast<LegoFloat>(static_cast<LegoS32>(p_elapsedMs));
 	LegoU32 inputFlags = m_input.m_inputFlags;
 	LegoU32 hasSteerInput = (inputFlags & c_inputFlagSteerMask) ? TRUE : FALSE;
+	elapsedSeconds *= 0.001f;
 	LegoFloat limitNegative;
 	LegoFloat limitPositive;
 	LegoFloat turnRate;
@@ -135,17 +136,8 @@ void PlayerControls::UpdateSteering(LegoU32 p_elapsedMs)
 				delta = -turnRate;
 			}
 		}
-		else if (m_input.m_steering > 0.0f) {
-			delta = -g_steeringReturnRate;
-			limitNegative = 0.0f;
-		}
-		else if (m_input.m_steering < 0.0f) {
-			delta = g_steeringReturnRate;
-			limitPositive = 0.0f;
-		}
 		else {
 			delta = 0.0f;
-			limitNegative = 0.0f;
 		}
 	}
 	else {
@@ -189,7 +181,8 @@ void PlayerControls::UpdateSteering(LegoU32 p_elapsedMs)
 				delta = analogValue + 1.0f;
 				delta *= 0.5f;
 				delta += 0.5f;
-				delta *= -turnRate;
+				LegoFloat negativeTurnRate = -turnRate;
+				delta *= negativeTurnRate;
 			}
 		}
 		else {
@@ -209,6 +202,7 @@ void PlayerControls::UpdateSteering(LegoU32 p_elapsedMs)
 		else {
 			limitNegative = 0.0f;
 			limitPositive = 0.0f;
+			delta = 0.0f;
 		}
 	}
 

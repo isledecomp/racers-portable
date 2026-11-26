@@ -14,8 +14,6 @@
 #include <float.h>
 #include <math.h>
 
-extern const LegoFloat g_brickSettleRate;
-
 inline void CrossVectors(const GolVec3& p_left, const GolVec3& p_right, GolVec3* p_dest)
 {
 	LegoFloat x = p_left.m_y * p_right.m_z;
@@ -272,17 +270,14 @@ void MagnetAction::Update(LegoU32 p_elapsedMs)
 		m_magnetEntity->SetDirectionUp(m_direction, direction);
 	}
 	else {
-		GolAnimatedEntity* racerEntity;
+		GolVec3 racerPosition;
 		if (m_heldRacer != NULL) {
-			racerEntity = m_heldRacer->m_visuals.m_carEntity;
+			m_heldRacer->m_visuals.m_carEntity->GetPosition(&racerPosition);
 		}
 		else {
 			CarVisuals* racerVisuals = &m_pulledRacer->m_visuals;
-			racerEntity = racerVisuals->GetCarEntity();
+			racerVisuals->m_carEntity->GetPosition(&racerPosition);
 		}
-
-		GolVec3 racerPosition;
-		racerEntity->GetPosition(&racerPosition);
 
 		GolVec3 modelPosition;
 		m_magnetEntity->GetPosition(&modelPosition);
@@ -306,7 +301,7 @@ void MagnetAction::Update(LegoU32 p_elapsedMs)
 		m_magnetEntity->SetUpDirection(direction, up);
 
 		if (m_heldRacer != NULL) {
-			if (m_heldRacer->m_physics.m_speed <= g_brickSettleRate) {
+			if (m_heldRacer->m_physics.m_speed <= 0.002f) {
 				m_flags |= c_flagVictimStopped;
 
 				if (!(m_heldRacer->m_flags & c_flagHalted)) {
@@ -331,7 +326,7 @@ void MagnetAction::Update(LegoU32 p_elapsedMs)
 					static_cast<LegoS32>(p_elapsedMs) * g_magnetHoldImpulseScale
 				);
 
-				if (m_heldRacer->m_physics.m_speed <= g_brickSettleRate) {
+				if (m_heldRacer->m_physics.m_speed <= 0.002f) {
 					LegoFloat distanceSquared = modelPosition.DistanceSquaredTo(racerPosition);
 
 					if (distanceSquared <= g_magnetPullDistanceSquared) {
@@ -524,7 +519,7 @@ void MagnetAction::Deploy()
 	m_sound->Play(TRUE);
 	m_sound->SetDistanceRange(g_magnetSoundMinDistance, g_magnetSoundMaxDistance);
 
-	m_sound->SetPosition(position);
+	m_sound->SetPosition(&position);
 	m_sound->ClearVelocity();
 
 	m_state = c_stateArmed;

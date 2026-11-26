@@ -89,15 +89,16 @@ bool IsModifierKey(SDL_Keycode p_key)
 
 } // namespace
 
-extern CommandLineArgs g_commandLineArgs;
+extern LegoS32 g_argc;
+extern LegoChar* g_argv[32];
 
 // The movies run before the game decides its display mode; mirror the intent the game
 // will apply afterwards (fullscreen unless -window was given) so fullscreen launches do
 // not play the intros in a window first.
 static bool WantsFullscreen()
 {
-	for (LegoS32 i = 0; i < g_commandLineArgs.m_argc; i++) {
-		if (g_commandLineArgs.m_argv[i] && strcmp(g_commandLineArgs.m_argv[i], "-window") == 0) {
+	for (LegoS32 i = 0; i < g_argc; i++) {
+		if (g_argv[i] && strcmp(g_argv[i], "-window") == 0) {
 			return false;
 		}
 	}

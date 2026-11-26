@@ -15,10 +15,6 @@
 #include <float.h>
 #include <math.h>
 
-extern const LegoFloat g_unk0x004b02e0;
-
-extern const LegoFloat g_fadeAlphaScale;
-
 // GLOBAL: LEGORACERS 0x004b19d4
 const LegoFloat g_turboSoundMinDistance = 30.0f;
 
@@ -271,17 +267,11 @@ void TurboAction::Update(LegoU32 p_elapsedMs)
 			racerEntity->CopyOrientation(m_smokeParticle->m_particle->GetBasis());
 		}
 
-		if (m_smokeParticle->m_particle != NULL) {
-			m_smokeParticle->m_particle->SetPosition(&position);
-		}
+		m_smokeParticle->SetPosition(&position);
 
-		CutsceneParticleRef* particleRef = m_smokeParticle;
 		GolVec3 velocity = m_racer->m_physics.m_velocity;
-		velocity *= g_turboSmokeVelocityScale;
-
-		if (particleRef->m_particle != NULL) {
-			particleRef->m_particle->SetVelocity(&velocity);
-		}
+		GolMath::ScaleVector3(&velocity, g_turboSmokeVelocityScale, &velocity);
+		m_smokeParticle->SetVelocity(&velocity);
 	}
 
 	if ((m_racer->m_flags & c_flagHalted) && m_state == c_stateBoosting && m_stateTimerMs < c_earlyEndWindowMs &&
@@ -293,22 +283,35 @@ void TurboAction::Update(LegoU32 p_elapsedMs)
 // FUNCTION: LEGORACERS 0x0045cf90
 void TurboAction::AnchorToRacer()
 {
+	GolVec3 position;
+	GolVec3 right;
+	GolVec3 direction;
+	GolVec3 up;
 	GolAnimatedEntity* racerEntity = m_racer->m_visuals.m_carEntity;
 
-	GolVec3 position;
 	racerEntity->GetPosition(&position);
 
-	const GolMatrix3& orientation = racerEntity->GetOrientation();
-
-	GolVec3 right = orientation.m_rows[0];
-	GolVec3 direction = orientation.m_rows[1];
-	GolVec3 up = orientation.m_rows[2];
-	position.m_x += right.m_x * g_turboPackOffset;
-	position.m_y += right.m_y * g_turboPackOffset;
-	position.m_z += right.m_z * g_turboPackOffset;
-	position.m_x += up.m_x * 3.0f;
-	position.m_y += up.m_y * 3.0f;
-	position.m_z += up.m_z * 3.0f;
+	right.m_x = racerEntity->GetOrientation().m_rows[0].m_x;
+	right.m_y = racerEntity->GetOrientation().m_rows[0].m_y;
+	right.m_z = racerEntity->GetOrientation().m_rows[0].m_z;
+	direction.m_x = racerEntity->GetOrientation().m_rows[1].m_x;
+	direction.m_y = racerEntity->GetOrientation().m_rows[1].m_y;
+	direction.m_z = racerEntity->GetOrientation().m_rows[1].m_z;
+	up.m_x = racerEntity->GetOrientation().m_rows[2].m_x;
+	up.m_y = racerEntity->GetOrientation().m_rows[2].m_y;
+	up.m_z = racerEntity->GetOrientation().m_rows[2].m_z;
+	position.m_x = right.m_x * g_turboPackOffset + position.m_x;
+	LegoFloat rightY = right.m_y;
+	rightY *= g_turboPackOffset;
+	rightY += position.m_y;
+	position.m_y = rightY;
+	LegoFloat rightZ = right.m_z;
+	rightZ *= g_turboPackOffset;
+	rightZ += position.m_z;
+	position.m_z = rightZ;
+	position.m_x = up.m_x * 3.0f + position.m_x;
+	position.m_y = up.m_y * 3.0f + position.m_y;
+	position.m_z = up.m_z * 3.0f + position.m_z;
 
 	m_turboEntity->SetPosition(position);
 	m_turboEntity->SetDirectionUp(direction, up);
@@ -347,7 +350,7 @@ void TurboAction::DrawTransparent(GolD3DRenderDevice* p_renderer)
 		}
 
 		LegoFloat amount = static_cast<LegoFloat>(elapsed) * g_turboFadeAlphaScale;
-		LegoS32 alpha = static_cast<LegoS32>(amount * g_fadeAlphaScale);
+		LegoS32 alpha = static_cast<LegoS32>(amount * 191.0f);
 		p_renderer->SetAlphaOverride(alpha, TRUE);
 	}
 
@@ -380,7 +383,7 @@ void TurboAction::AdvanceState()
 			);
 		}
 		else {
-			LegoFloat volume = static_cast<LegoFloat>(state) * g_unk0x004b02e0 + g_turboEndVolumeBase;
+			LegoFloat volume = static_cast<LegoFloat>(state) * 0.2f + g_turboEndVolumeBase;
 			m_soundSource->PlaySpatialSoundById(
 				c_soundEnd,
 				&position,

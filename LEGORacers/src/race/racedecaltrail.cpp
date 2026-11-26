@@ -358,7 +358,7 @@ void RaceDecalManager::Trail::Decal::BeginGeometry(GolModelBase* p_model)
 	model->GetVertexArray(&m_vertices);
 
 	m_model->GetIndexArrayInto(&indexArrayBase);
-	LegoU8* destIndexBytes = static_cast<GdbModelIndexArray*>(indexArrayBase)->GetIndexBytes();
+	m_indexBytes = static_cast<GdbModelIndexArray*>(indexArrayBase)->GetIndexBytes();
 
 	m_vertexCount = 0;
 	m_batchFirstVertex = 0;
@@ -368,11 +368,9 @@ void RaceDecalManager::Trail::Decal::BeginGeometry(GolModelBase* p_model)
 	m_batchTriangleCount = 0;
 
 	model = m_model;
-	m_indexBytes = destIndexBytes;
-	LegoU32 one = 1;
-	model->SetDirty(one);
+	model->SetDirty(TRUE);
 	model->GetMutableGroups()[0] = c_commandModelFlags;
-	m_groupIndex = one;
+	m_groupIndex = 1;
 }
 
 // FUNCTION: LEGORACERS 0x00414b30
@@ -453,11 +451,10 @@ void RaceDecalManager::Trail::Decal::SetOrientation(GolVec3* p_normal, GolVec3* 
 	GolVec3* normalized = &m_normal;
 	GolMath::NormalizeVector3(*p_normal, normalized);
 
-	LegoFloat dot = normalized->m_z;
+	LegoFloat dot =
+		((GOL_MUL(normalized->m_z, p_lengthAxis->m_z) + GOL_MUL(normalized->m_y, p_lengthAxis->m_y) +
+		  GOL_MUL(normalized->m_x, p_lengthAxis->m_x)));
 	GolVec3* perpendicular = &m_lengthAxis;
-	dot *= p_lengthAxis->m_z;
-	dot += normalized->m_y * p_lengthAxis->m_y;
-	dot += normalized->m_x * p_lengthAxis->m_x;
 
 	GolVec3 scaled;
 	scaled.m_x = dot * normalized->m_x;
@@ -508,6 +505,8 @@ void RaceDecalManager::Trail::Decal::ComputeProjection()
 	g_decalVAxisX = value;
 
 	value = m_widthAxis.m_y;
+	if (value == 0) {
+	}
 	value *= scaleX;
 	g_decalUAxisY = value;
 
@@ -562,11 +561,9 @@ LegoU32 RaceDecalManager::Trail::Decal::TransformVertices(
 	while (vertexIndex < end) {
 		m_sourceVertices->GetPosition(vertexIndex, &projected->m_position);
 
-		LegoFloat value = g_decalUAxisX;
-		value *= projected->m_position.m_x;
-		projected->m_projected.m_x.m_float = value;
+		projected->m_projected.m_x.m_float = g_decalUAxisX * projected->m_position.m_x;
 		projected->m_projected.m_y.m_float = g_decalVAxisX * projected->m_position.m_x;
-		value = projected->m_position.m_y;
+		LegoFloat value = projected->m_position.m_y;
 		value *= g_decalUAxisY;
 		projected->m_projected.m_x.m_float += value;
 		value = projected->m_position.m_y;
@@ -614,260 +611,243 @@ void RaceDecalManager::Trail::Decal::EmitPolygon(LegoU32 p_firstPolygon, LegoU32
 		LegoU32 flags1 = vertex1->m_clipFlags;
 		LegoU32 flags2 = vertex2->m_clipFlags;
 
-		if (!(flags0 & flags1 & flags2)) {
-			LegoFloat cross = (vertex1->m_projected.m_x.m_float - vertex2->m_projected.m_x.m_float) *
-								  (vertex0->m_projected.m_y.m_float - vertex2->m_projected.m_y.m_float) -
-							  (vertex1->m_projected.m_y.m_float - vertex2->m_projected.m_y.m_float) *
-								  (vertex0->m_projected.m_x.m_float - vertex2->m_projected.m_x.m_float);
+		if (flags0 & flags1 & flags2) {
+			indices += 4;
+			continue;
+		}
 
-			if (cross > 0.0f) {
-				LegoU32 combinedFlags = flags0 | flags1 | flags2;
-				if (combinedFlags) {
-					LegoU32 indicesA[16];
-					LegoU32 indicesB[16];
-					LegoU32 flagsA[16];
-					LegoU32 flagsB[16];
-					LegoU32* inputIndices = indicesA;
-					LegoU32* outputIndices = indicesB;
-					LegoU32* inputFlags = flagsA;
-					LegoU32* outputFlags = flagsB;
-					LegoU32 generatedIndex = c_projectedVertexCount;
-					LegoU32 inputCount = 3;
-					LegoU32 i;
+		if ((vertex1->m_projected.m_x.m_float - vertex2->m_projected.m_x.m_float) *
+					(vertex0->m_projected.m_y.m_float - vertex2->m_projected.m_y.m_float) -
+				(vertex1->m_projected.m_y.m_float - vertex2->m_projected.m_y.m_float) *
+					(vertex0->m_projected.m_x.m_float - vertex2->m_projected.m_x.m_float) <=
+			0.0f) {
+			indices += 4;
+			continue;
+		}
 
-					inputIndices[0] = index0;
-					inputIndices[1] = index1;
-					inputIndices[2] = index2;
-					inputFlags[0] = flags0;
-					inputFlags[1] = flags1;
-					inputFlags[2] = flags2;
+		LegoU32 combinedFlags = flags0 | flags1 | flags2;
 
-					if (combinedFlags & c_clipXMinFlag) {
-						LegoU32 outputCount = 0;
-						LegoU32 previousIndex = inputCount - 1;
-						LegoU32 previousOutside = inputFlags[previousIndex] & c_clipXMinFlag;
-						for (i = 0; i < inputCount; i++) {
-							LegoU32 currentOutside = inputFlags[i] & c_clipXMinFlag;
-							if (previousOutside != currentOutside) {
-								ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
-								ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
-								ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
-								LegoFloat amount =
-									previous->m_projected.m_x.m_float /
-									(previous->m_projected.m_x.m_float - current->m_projected.m_x.m_float);
+		if (!combinedFlags) {
+			EmitTriangle(vertex0, vertex1, vertex2);
+		}
+		else {
+			LegoU32 indicesA[16];
+			LegoU32 flagsA[16];
+			LegoU32 indicesB[16];
+			LegoU32 flagsB[16];
 
-								clipped->m_projected.m_x.m_float = 0.0f;
-								clipped->m_position.m_x =
-									(current->m_position.m_x - previous->m_position.m_x) * amount +
-									previous->m_position.m_x;
-								clipped->m_position.m_y =
-									(current->m_position.m_y - previous->m_position.m_y) * amount +
-									previous->m_position.m_y;
-								clipped->m_position.m_z =
-									(current->m_position.m_z - previous->m_position.m_z) * amount +
-									previous->m_position.m_z;
-								clipped->m_projected.m_y.m_float =
-									(current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float) * amount +
-									previous->m_projected.m_y.m_float;
+			indicesA[0] = index0;
+			indicesA[1] = index1;
+			flagsA[0] = flags0;
+			flagsA[1] = flags1;
+			flagsA[2] = flags2;
+			indicesA[2] = index2;
 
-								LegoU32 projectedYBits = clipped->m_projected.m_y.m_bits;
-								clipped->m_clipFlags =
-									(((projectedYBits >> 1) & 0x40000000) |
-									 (~projectedYBits & (c_floatOneBits - projectedYBits) & c_clipYMaxMask)) >>
-									28;
+			LegoU32* inputIndices = indicesA;
+			LegoU32* inputFlags = flagsA;
+			LegoU32* outputIndices = indicesB;
+			LegoU32* outputFlags = flagsB;
+			LegoU32 generatedIndex = c_projectedVertexCount;
+			LegoS32 inputCount = 3;
+			LegoS32 outputCount = 0;
 
-								outputIndices[outputCount] = generatedIndex;
-								outputFlags[outputCount] = clipped->m_clipFlags;
-								generatedIndex++;
-								outputCount++;
-							}
-							if (!currentOutside) {
-								outputIndices[outputCount] = inputIndices[i];
-								outputFlags[outputCount] = inputFlags[i];
-								outputCount++;
-							}
-							previousIndex = i;
-							previousOutside = currentOutside;
-						}
+			if (combinedFlags & c_clipXMinFlag) {
+				LegoS32 previousIndex = inputCount - 1;
+				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipXMinFlag;
 
-						LegoU32* tempIndices = inputIndices;
-						inputIndices = outputIndices;
-						outputIndices = tempIndices;
-						LegoU32* tempFlags = inputFlags;
-						inputFlags = outputFlags;
-						outputFlags = tempFlags;
-						inputCount = outputCount;
+				for (LegoS32 i = 0; i < inputCount; i++) {
+					LegoU32 currentOutside = inputFlags[i] & c_clipXMinFlag;
+
+					if (currentOutside ^ previousOutside) {
+						ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
+						ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
+						ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
+						outputIndices[outputCount] = generatedIndex;
+						LegoFloat amount = (previous->m_projected.m_x.m_float - 0.0f) /
+										   (previous->m_projected.m_x.m_float - current->m_projected.m_x.m_float);
+						generatedIndex++;
+						clipped->m_projected.m_x.m_float = 0.0f;
+						GolVec3 delta = (current->m_position - previous->m_position) * amount;
+						clipped->m_position.m_x = delta.m_x + previous->m_position.m_x;
+						clipped->m_position.m_y = delta.m_y + previous->m_position.m_y;
+						clipped->m_position.m_z = delta.m_z + previous->m_position.m_z;
+						clipped->m_projected.m_y.m_float =
+							(current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float) * amount +
+							previous->m_projected.m_y.m_float;
+						LegoU32 projectedYBits = clipped->m_projected.m_y.m_bits;
+						outputFlags[outputCount] =
+							(((projectedYBits >> 1) & 0x40000000) |
+							 (~projectedYBits & (c_floatOneBits - projectedYBits) & c_clipYMaxMask)) >>
+							28;
+						outputCount++;
 					}
 
-					if ((combinedFlags & c_clipXMaxFlag) && inputCount > 0) {
-						LegoU32 outputCount = 0;
-						LegoU32 previousIndex = inputCount - 1;
-						LegoU32 previousOutside = inputFlags[previousIndex] & c_clipXMaxFlag;
-						for (i = 0; i < inputCount; i++) {
-							LegoU32 currentOutside = inputFlags[i] & c_clipXMaxFlag;
-							if (previousOutside != currentOutside) {
-								ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
-								ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
-								ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
-								LegoFloat amount =
-									(1.0f - previous->m_projected.m_x.m_float) /
-									(current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float);
-
-								clipped->m_projected.m_x.m_float = g_decalMaxTextureCoordinate;
-								clipped->m_position.m_x =
-									(current->m_position.m_x - previous->m_position.m_x) * amount +
-									previous->m_position.m_x;
-								clipped->m_position.m_y =
-									(current->m_position.m_y - previous->m_position.m_y) * amount +
-									previous->m_position.m_y;
-								clipped->m_position.m_z =
-									(current->m_position.m_z - previous->m_position.m_z) * amount +
-									previous->m_position.m_z;
-								clipped->m_projected.m_y.m_float =
-									(current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float) * amount +
-									previous->m_projected.m_y.m_float;
-
-								LegoU32 projectedYBits = clipped->m_projected.m_y.m_bits;
-								clipped->m_clipFlags =
-									(((projectedYBits >> 1) & 0x40000000) |
-									 (~projectedYBits & (c_floatOneBits - projectedYBits) & c_clipYMaxMask)) >>
-									28;
-
-								outputIndices[outputCount] = generatedIndex;
-								outputFlags[outputCount] = clipped->m_clipFlags;
-								generatedIndex++;
-								outputCount++;
-							}
-							if (!currentOutside) {
-								outputIndices[outputCount] = inputIndices[i];
-								outputFlags[outputCount] = inputFlags[i];
-								outputCount++;
-							}
-							previousIndex = i;
-							previousOutside = currentOutside;
-						}
-
-						LegoU32* tempIndices = inputIndices;
-						inputIndices = outputIndices;
-						outputIndices = tempIndices;
-						LegoU32* tempFlags = inputFlags;
-						inputFlags = outputFlags;
-						outputFlags = tempFlags;
-						inputCount = outputCount;
+					if (!currentOutside) {
+						outputIndices[outputCount] = inputIndices[i];
+						outputFlags[outputCount] = inputFlags[i];
+						outputCount++;
 					}
 
-					if ((combinedFlags & c_clipYMinFlag) && inputCount > 0) {
-						LegoU32 outputCount = 0;
-						LegoU32 previousIndex = inputCount - 1;
-						LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMinFlag;
-						for (i = 0; i < inputCount; i++) {
-							LegoU32 currentOutside = inputFlags[i] & c_clipYMinFlag;
-							if (previousOutside != currentOutside) {
-								ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
-								ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
-								ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
-								LegoFloat amount =
-									previous->m_projected.m_y.m_float /
-									(previous->m_projected.m_y.m_float - current->m_projected.m_y.m_float);
-
-								clipped->m_projected.m_y.m_float = 0.0f;
-								clipped->m_clipFlags = 0;
-								clipped->m_position.m_x =
-									(current->m_position.m_x - previous->m_position.m_x) * amount +
-									previous->m_position.m_x;
-								clipped->m_position.m_y =
-									(current->m_position.m_y - previous->m_position.m_y) * amount +
-									previous->m_position.m_y;
-								clipped->m_position.m_z =
-									(current->m_position.m_z - previous->m_position.m_z) * amount +
-									previous->m_position.m_z;
-								clipped->m_projected.m_x.m_float =
-									(current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float) * amount +
-									previous->m_projected.m_x.m_float;
-
-								outputIndices[outputCount] = generatedIndex;
-								outputFlags[outputCount] = clipped->m_clipFlags;
-								generatedIndex++;
-								outputCount++;
-							}
-							if (!currentOutside) {
-								outputIndices[outputCount] = inputIndices[i];
-								outputFlags[outputCount] = inputFlags[i];
-								outputCount++;
-							}
-							previousIndex = i;
-							previousOutside = currentOutside;
-						}
-
-						LegoU32* tempIndices = inputIndices;
-						inputIndices = outputIndices;
-						outputIndices = tempIndices;
-						LegoU32* tempFlags = inputFlags;
-						inputFlags = outputFlags;
-						outputFlags = tempFlags;
-						inputCount = outputCount;
-					}
-
-					if ((combinedFlags & c_clipYMaxFlag) && inputCount > 0) {
-						LegoU32 outputCount = 0;
-						LegoU32 previousIndex = inputCount - 1;
-						LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMaxFlag;
-						for (i = 0; i < inputCount; i++) {
-							LegoU32 currentOutside = inputFlags[i] & c_clipYMaxFlag;
-							if (previousOutside != currentOutside) {
-								ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
-								ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
-								ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
-								LegoFloat amount =
-									(1.0f - previous->m_projected.m_y.m_float) /
-									(current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float);
-
-								clipped->m_projected.m_y.m_float = 0.99000001f;
-								clipped->m_clipFlags = 0;
-								clipped->m_position.m_x =
-									(current->m_position.m_x - previous->m_position.m_x) * amount +
-									previous->m_position.m_x;
-								clipped->m_position.m_y =
-									(current->m_position.m_y - previous->m_position.m_y) * amount +
-									previous->m_position.m_y;
-								clipped->m_position.m_z =
-									(current->m_position.m_z - previous->m_position.m_z) * amount +
-									previous->m_position.m_z;
-								clipped->m_projected.m_x.m_float =
-									(current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float) * amount +
-									previous->m_projected.m_x.m_float;
-
-								outputIndices[outputCount] = generatedIndex;
-								outputFlags[outputCount] = clipped->m_clipFlags;
-								generatedIndex++;
-								outputCount++;
-							}
-							if (!currentOutside) {
-								outputIndices[outputCount] = inputIndices[i];
-								outputFlags[outputCount] = inputFlags[i];
-								outputCount++;
-							}
-							previousIndex = i;
-							previousOutside = currentOutside;
-						}
-
-						inputIndices = outputIndices;
-						inputCount = outputCount;
-					}
-
-					if (inputCount > 2) {
-						for (i = 1; i < inputCount - 1; i++) {
-							EmitTriangle(
-								&g_decalProjectedVertices[inputIndices[0]],
-								&g_decalProjectedVertices[inputIndices[i]],
-								&g_decalProjectedVertices[inputIndices[i + 1]]
-							);
-						}
-					}
+					previousIndex = i;
+					previousOutside = currentOutside;
 				}
-				else {
-					EmitTriangle(vertex0, vertex1, vertex2);
+
+				LegoU32* swapIndices = inputIndices;
+				inputIndices = outputIndices;
+				outputIndices = swapIndices;
+				LegoU32* swapFlags = inputFlags;
+				inputFlags = outputFlags;
+				outputFlags = swapFlags;
+				inputCount = outputCount;
+				outputCount = 0;
+			}
+
+			if ((combinedFlags & c_clipXMaxFlag) && inputCount > 0) {
+				LegoS32 previousIndex = inputCount - 1;
+				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipXMaxFlag;
+
+				for (LegoS32 i = 0; i < inputCount; i++) {
+					LegoU32 currentOutside = inputFlags[i] & c_clipXMaxFlag;
+
+					if (currentOutside ^ previousOutside) {
+						ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
+						ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
+						outputIndices[outputCount] = generatedIndex;
+						ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
+						LegoFloat amount = (1.0f - previous->m_projected.m_x.m_float) /
+										   (current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float);
+						generatedIndex++;
+						clipped->m_projected.m_x.m_float = g_decalMaxTextureCoordinate;
+						GolVec3 delta = (current->m_position - previous->m_position) * amount;
+						clipped->m_position.m_x = delta.m_x + previous->m_position.m_x;
+						clipped->m_position.m_y = delta.m_y + previous->m_position.m_y;
+						clipped->m_position.m_z = delta.m_z + previous->m_position.m_z;
+						clipped->m_projected.m_y.m_float =
+							(current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float) * amount +
+							previous->m_projected.m_y.m_float;
+						LegoU32 projectedYBits = clipped->m_projected.m_y.m_bits;
+						outputFlags[outputCount] =
+							(((projectedYBits >> 1) & 0x40000000) |
+							 (~projectedYBits & (c_floatOneBits - projectedYBits) & c_clipYMaxMask)) >>
+							28;
+						outputCount++;
+					}
+
+					if (!currentOutside) {
+						outputIndices[outputCount] = inputIndices[i];
+						outputFlags[outputCount] = inputFlags[i];
+						outputCount++;
+					}
+
+					previousIndex = i;
+					previousOutside = currentOutside;
 				}
+
+				LegoU32* swapIndices = inputIndices;
+				inputIndices = outputIndices;
+				outputIndices = swapIndices;
+				LegoU32* swapFlags = inputFlags;
+				inputFlags = outputFlags;
+				outputFlags = swapFlags;
+				inputCount = outputCount;
+				outputCount = 0;
+			}
+
+			if ((combinedFlags & c_clipYMinFlag) && inputCount > 0) {
+				LegoS32 previousIndex = inputCount - 1;
+				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMinFlag;
+
+				for (LegoS32 i = 0; i < inputCount; i++) {
+					LegoU32 currentOutside = inputFlags[i] & c_clipYMinFlag;
+
+					if (currentOutside ^ previousOutside) {
+						outputIndices[outputCount] = generatedIndex;
+						ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
+						ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
+						ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
+						LegoFloat amount = (previous->m_projected.m_y.m_float - 0.0f) /
+										   (previous->m_projected.m_y.m_float - current->m_projected.m_y.m_float);
+						generatedIndex++;
+						clipped->m_projected.m_y.m_float = 0.0f;
+						outputFlags[outputCount] = 0;
+						outputCount++;
+						GolVec3 delta = (current->m_position - previous->m_position) * amount;
+						clipped->m_position.m_x = delta.m_x + previous->m_position.m_x;
+						clipped->m_position.m_y = delta.m_y + previous->m_position.m_y;
+						clipped->m_position.m_z = delta.m_z + previous->m_position.m_z;
+						clipped->m_projected.m_x.m_float =
+							(current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float) * amount +
+							previous->m_projected.m_x.m_float;
+					}
+
+					if (!currentOutside) {
+						outputIndices[outputCount] = inputIndices[i];
+						outputFlags[outputCount] = inputFlags[i];
+						outputCount++;
+					}
+
+					previousIndex = i;
+					previousOutside = currentOutside;
+				}
+
+				LegoU32* swapIndices = inputIndices;
+				inputIndices = outputIndices;
+				outputIndices = swapIndices;
+				LegoU32* swapFlags = inputFlags;
+				inputFlags = outputFlags;
+				outputFlags = swapFlags;
+				inputCount = outputCount;
+				outputCount = 0;
+			}
+
+			if ((combinedFlags & c_clipYMaxFlag) && inputCount > 0) {
+				LegoS32 previousIndex = inputCount - 1;
+				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMaxFlag;
+
+				for (LegoS32 i = 0; i < inputCount; i++) {
+					LegoU32 currentOutside = inputFlags[i] & c_clipYMaxFlag;
+
+					if (currentOutside ^ previousOutside) {
+						ProjectedVertex* clipped = &g_decalProjectedVertices[generatedIndex];
+						ProjectedVertex* previous = &g_decalProjectedVertices[inputIndices[previousIndex]];
+						ProjectedVertex* current = &g_decalProjectedVertices[inputIndices[i]];
+						outputIndices[outputCount] = generatedIndex;
+						LegoFloat amount = (1.0f - previous->m_projected.m_y.m_float) /
+										   (current->m_projected.m_y.m_float - previous->m_projected.m_y.m_float);
+						generatedIndex++;
+						clipped->m_projected.m_y.m_float = g_decalMaxTextureCoordinate;
+						outputFlags[outputCount] = 0;
+						outputCount++;
+						GolVec3 delta = (current->m_position - previous->m_position) * amount;
+						clipped->m_position.m_x = delta.m_x + previous->m_position.m_x;
+						clipped->m_position.m_y = delta.m_y + previous->m_position.m_y;
+						clipped->m_position.m_z = delta.m_z + previous->m_position.m_z;
+						clipped->m_projected.m_x.m_float =
+							(current->m_projected.m_x.m_float - previous->m_projected.m_x.m_float) * amount +
+							previous->m_projected.m_x.m_float;
+					}
+
+					if (!currentOutside) {
+						outputIndices[outputCount] = inputIndices[i];
+						outputFlags[outputCount] = inputFlags[i];
+						outputCount++;
+					}
+
+					previousIndex = i;
+					previousOutside = currentOutside;
+				}
+
+				inputIndices = outputIndices;
+				inputCount = outputCount;
+			}
+
+			ProjectedVertex* first = &g_decalProjectedVertices[inputIndices[0]];
+			for (LegoS32 i = 1; i < inputCount - 1; i++) {
+				EmitTriangle(
+					first,
+					&g_decalProjectedVertices[inputIndices[i]],
+					&g_decalProjectedVertices[inputIndices[i + 1]]
+				);
 			}
 		}
 

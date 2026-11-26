@@ -167,6 +167,8 @@ CutsceneParticleRef* CutsceneAnimation::SpawnParticle(
 	GolVec3* p_param4
 )
 {
+	CutsceneParticle* particle = NULL;
+	LegoU8 lowestPriority = 0xff;
 	Emitter* runtime = static_cast<Emitter*>(GetName(p_param1));
 
 	LegoU32 refIndex = 0;
@@ -178,26 +180,24 @@ CutsceneParticleRef* CutsceneAnimation::SpawnParticle(
 		return NULL;
 	}
 
-	LegoU8 lowestPriority = 0xff;
-	CutsceneParticle* particle = NULL;
 	LegoU32 particleIndex;
 
 	for (particleIndex = 0; particleIndex < m_numParticles; particleIndex++) {
 		CutsceneParticle* currentParticle = &m_particles[particleIndex];
-		if (!currentParticle->IsActive()) {
-			currentParticle->ActivateEmitter(runtime);
+		if (!m_particles[particleIndex].IsActive()) {
+			m_particles[particleIndex].ActivateEmitter(runtime);
 			if (p_param3 != NULL && p_param4 != NULL) {
-				currentParticle->SetOrientation(p_param3, p_param4);
+				m_particles[particleIndex].SetOrientation(p_param3, p_param4);
 			}
 			if (p_param2 != NULL) {
-				currentParticle->SetPosition(p_param2);
+				m_particles[particleIndex].SetPosition(p_param2);
 			}
 
 			if (runtime->IsPersistent()) {
 				CutsceneParticleRef* ref = &m_refs[refIndex];
 				ref->m_flags |= CutsceneParticleRef::c_flagInUse;
-				ref->m_particle = currentParticle;
-				currentParticle->SetRef(ref);
+				ref->m_particle = &m_particles[particleIndex];
+				m_particles[particleIndex].SetRef(ref);
 				return ref;
 			}
 
@@ -238,7 +238,8 @@ CutsceneParticleRef* CutsceneAnimation::SpawnParticle(
 
 	if (runtime->IsPersistent()) {
 		CutsceneParticleRef* ref = &m_refs[refIndex];
-		ref->m_flags |= CutsceneParticleRef::c_flagInUse;
+		LegoU8& refFlags = ref->m_flags;
+		refFlags |= CutsceneParticleRef::c_flagInUse;
 		ref->m_particle = particle;
 		particle->SetRef(ref);
 		return ref;
@@ -394,7 +395,7 @@ void CutsceneAnimation::Emitter::Parse(
 	while ((token = p_parser->GetNextToken()) != GolFileParser::e_rightCurly) {
 		switch (token) {
 		case CutsceneAnimation::EmbTxtParser::e_emitInterval:
-			m_emitIntervalMs = static_cast<LegoS32>(g_floatConst1000 / p_parser->ReadFloat());
+			m_emitIntervalMs = static_cast<LegoS32>(1000.0f / p_parser->ReadFloat());
 			break;
 		case CutsceneAnimation::EmbTxtParser::e_emitChance:
 			m_emitChance = static_cast<LegoS32>(p_parser->ReadFloat() * g_floatConst256);

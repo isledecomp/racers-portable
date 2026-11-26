@@ -15,11 +15,8 @@
 #include <string.h>
 
 extern const LegoFloat g_carBuildModelHeightScale;
-extern const LegoFloat g_carBuildModelTextureCoordinateScale;
 extern const LegoFloat g_surfaceSoundMaxDistance;
 extern const LegoFloat g_surfaceSoundMinDistance;
-extern const LegoFloat g_twoPi;
-extern const LegoFloat g_unk0x004b0544;
 
 // GLOBAL: LEGORACERS 0x004c4868
 RacerPhysics::RouteCursorInstance g_routeProbeCursor;
@@ -474,7 +471,7 @@ void RacerPhysics::ApplyDirectionalImpulse(GolVec3* p_direction, LegoFloat p_mag
 			value = m_routeCursor.m_playbackSpeed;
 			value += scaled;
 		}
-		value += (1.0f - dot) * g_unk0x004b0544;
+		value += (1.0f - dot) * 0.05f;
 
 		if (value > g_routeMaxPlaybackSpeed) {
 			value = g_routeMaxPlaybackSpeed;
@@ -482,7 +479,7 @@ void RacerPhysics::ApplyDirectionalImpulse(GolVec3* p_direction, LegoFloat p_mag
 		m_routeCursor.m_playbackSpeed = value;
 	}
 	else {
-		LegoFloat amount = (dot + 1.0f) * g_carBuildModelTextureCoordinateScale;
+		LegoFloat amount = (dot + 1.0f) * 0.25f;
 		LegoFloat value;
 		if (m_flags & c_flagSpinning) {
 			value = g_routeSpinSpeed - 0.1f;
@@ -704,7 +701,7 @@ void RacerPhysics::StartSpin(LegoFloat p_turns, LegoFloat p_rate, LegoFloat p_al
 	LegoU32 flags = m_flags;
 	if (!(flags & c_flagSpinning)) {
 		LegoFloat scaled = p_turns;
-		scaled *= g_twoPi;
+		scaled *= 6.2831855f;
 		scaled /= p_rate;
 		m_yawImpulseMs = static_cast<LegoS32>(scaled);
 		m_routeSpinRate = p_rate;
@@ -925,36 +922,51 @@ void RacerPhysics::SaveRouteState()
 void RacerPhysics::UpdateRouteRotation(LegoU32 p_elapsedMs)
 {
 	GolQuat rotation = m_routeCursor.m_rotation;
+	GolMatrix3 orientation;
+	GolVec3 rotatedForward;
+	GolVec3 transformed;
 	GolMath::QuatToMatrix3(&rotation, &m_carEntity->GetOrientation().m_m[0][0]);
 
 	if ((m_flags & c_flagSliding) || m_slideBankAngle != 0.0f) {
-		const GolMatrix3& orientation = m_carEntity->GetOrientation();
-		GolVec3 axis = orientation.m_rows[0];
-		GolVec3 forward = orientation.m_rows[2];
-		GolVec3 rotatedForward;
-		GolMath::RotateAboutAxis(&forward, &rotatedForward, &axis, m_slideBankAngle);
-		m_carEntity->SetDirectionUp(axis, rotatedForward);
+		orientation.m_rows[0].m_x = m_carEntity->GetOrientation().m_rows[0].m_x;
+		orientation.m_rows[0].m_y = m_carEntity->GetOrientation().m_rows[0].m_y;
+		orientation.m_rows[0].m_z = m_carEntity->GetOrientation().m_rows[0].m_z;
+		orientation.m_rows[1].m_x = m_carEntity->GetOrientation().m_rows[1].m_x;
+		orientation.m_rows[1].m_y = m_carEntity->GetOrientation().m_rows[1].m_y;
+		orientation.m_rows[1].m_z = m_carEntity->GetOrientation().m_rows[1].m_z;
+		orientation.m_rows[2].m_x = m_carEntity->GetOrientation().m_rows[2].m_x;
+		orientation.m_rows[2].m_y = m_carEntity->GetOrientation().m_rows[2].m_y;
+		orientation.m_rows[2].m_z = m_carEntity->GetOrientation().m_rows[2].m_z;
+		GolMath::RotateAboutAxis(&orientation.m_rows[2], &rotatedForward, &orientation.m_rows[0], m_slideBankAngle);
+		m_carEntity->SetDirectionUp(orientation.m_rows[0], rotatedForward);
 	}
 
-	LegoU32 elapsedMs = p_elapsedMs;
-	LegoU32 timer = m_pitchImpulseMs;
-	if (timer != 0 || m_routeTiltAngle != 0.0f) {
-		if (timer != 0) {
-			if (elapsedMs >= timer) {
+	if (m_pitchImpulseMs != 0 || m_routeTiltAngle != 0.0f) {
+		if (m_pitchImpulseMs != 0) {
+			if (p_elapsedMs >= m_pitchImpulseMs) {
 				m_pitchImpulseMs = 0;
-				m_routeTiltRate = -(m_routeTiltRate * g_carBuildModelTextureCoordinateScale);
+				LegoFloat rate = m_routeTiltRate;
+				rate *= 0.25f;
+				m_routeTiltRate = -rate;
 			}
 			else {
-				m_pitchImpulseMs = timer - elapsedMs;
+				m_pitchImpulseMs = m_pitchImpulseMs - p_elapsedMs;
 			}
 		}
 
 		LegoBool32 wasNonNegative = m_routeTiltAngle >= 0.0f;
-		const GolMatrix3& orientation = m_carEntity->GetOrientation();
-		GolVec3 axis = orientation.m_rows[0];
-		GolVec3 forward = orientation.m_rows[2];
+		LegoFloat tiltIncrement = ((m_routeTiltRate) * (static_cast<LegoFloat>(static_cast<LegoS32>(p_elapsedMs))));
+		orientation.m_rows[0].m_x = m_carEntity->GetOrientation().m_rows[0].m_x;
+		orientation.m_rows[0].m_y = m_carEntity->GetOrientation().m_rows[0].m_y;
+		orientation.m_rows[0].m_z = m_carEntity->GetOrientation().m_rows[0].m_z;
+		orientation.m_rows[1].m_x = m_carEntity->GetOrientation().m_rows[1].m_x;
+		orientation.m_rows[1].m_y = m_carEntity->GetOrientation().m_rows[1].m_y;
+		orientation.m_rows[1].m_z = m_carEntity->GetOrientation().m_rows[1].m_z;
+		orientation.m_rows[2].m_x = m_carEntity->GetOrientation().m_rows[2].m_x;
+		orientation.m_rows[2].m_y = m_carEntity->GetOrientation().m_rows[2].m_y;
+		orientation.m_rows[2].m_z = m_carEntity->GetOrientation().m_rows[2].m_z;
 
-		m_routeTiltAngle += m_routeTiltRate * static_cast<LegoFloat>(static_cast<LegoS32>(elapsedMs));
+		m_routeTiltAngle += tiltIncrement;
 		LegoBool32 applyTiltRotation = TRUE;
 		if (m_pitchImpulseMs == 0) {
 			LegoBool32 isNonNegative = m_routeTiltAngle >= 0.0f;
@@ -968,11 +980,9 @@ void RacerPhysics::UpdateRouteRotation(LegoU32 p_elapsedMs)
 		if (applyTiltRotation) {
 			m_carEntity->LocalToWorld(m_anchorWheelOffset, &m_wheelProbes[1].m_wheelPosition);
 
-			GolVec3 rotatedForward;
-			GolMath::RotateAboutAxis(&forward, &rotatedForward, &axis, m_routeTiltAngle);
-			m_carEntity->SetDirectionUp(axis, rotatedForward);
+			GolMath::RotateAboutAxis(&orientation.m_rows[2], &rotatedForward, &orientation.m_rows[0], m_routeTiltAngle);
+			m_carEntity->SetDirectionUp(orientation.m_rows[0], rotatedForward);
 
-			GolVec3 transformed;
 			m_carEntity->LocalToWorld(m_anchorWheelOffset, &transformed);
 			m_routeTiltHeight = transformed.m_z - m_wheelProbes[1].m_wheelPosition.m_z;
 		}
@@ -990,15 +1000,12 @@ void RacerPhysics::UpdateRouteRotation(LegoU32 p_elapsedMs)
 
 	m_yawImpulseMs -= p_elapsedMs;
 
-	GolVec3 right;
-	GolVec3 forward;
-	m_carEntity->GetAxes(&right, &forward);
+	m_carEntity->GetAxes(&orientation.m_rows[0], &orientation.m_rows[2]);
 
-	m_routeSpinAngle += m_routeSpinRate * static_cast<LegoFloat>(static_cast<LegoS32>(elapsedMs));
+	m_routeSpinAngle += ((m_routeSpinRate) * (static_cast<LegoFloat>(static_cast<LegoS32>(p_elapsedMs))));
 
-	GolVec3 rotatedRight;
-	GolMath::RotateAboutAxis(&right, &rotatedRight, &forward, m_routeSpinAngle);
-	m_carEntity->SetDirectionUp(rotatedRight, forward);
+	GolMath::RotateAboutAxis(&orientation.m_rows[0], &rotatedForward, &orientation.m_rows[2], m_routeSpinAngle);
+	m_carEntity->SetDirectionUp(rotatedForward, orientation.m_rows[2]);
 }
 
 // FUNCTION: LEGORACERS 0x0042a570
@@ -1371,13 +1378,17 @@ LegoBool32 RacerPhysics::CanPowerslide()
 		return FALSE;
 	}
 
-	GolOrientedEntity* entity = m_carEntity;
-	LegoFloat dot = entity->m_orientation.m_rows[0].m_x;
-	LegoFloat y = entity->m_orientation.m_rows[0].m_y;
-	LegoFloat z = m_velocityDirection.m_z * entity->m_orientation.m_rows[0].m_z;
-	z += y * m_velocityDirection.m_y;
-	dot *= m_velocityDirection.m_x;
-	dot += z;
+	GolVec2 orientation;
+	orientation.m_x = m_carEntity->GetOrientation().m_rows[0].m_x;
+	orientation.m_y = m_carEntity->GetOrientation().m_rows[0].m_y;
+	LegoFloat orientationY = orientation.m_y;
+	LegoFloat dot = m_velocityDirection.m_z;
+	dot *= m_carEntity->GetOrientation().m_rows[0].m_z;
+	LegoFloat y = m_velocityDirection.m_y;
+	y *= orientationY;
+	dot += y;
+	dot += orientation.m_x * m_velocityDirection.m_x;
+
 	if (dot <= g_powerslideAlignmentMin) {
 		return FALSE;
 	}
@@ -1392,13 +1403,16 @@ LegoBool32 RacerPhysics::CanPowerslide()
 // FUNCTION: LEGORACERS 0x0042aea0
 LegoBool32 RacerPhysics::CanSteer(LegoFloat p_turnRadius)
 {
-	GolOrientedEntity* entity = m_carEntity;
-	LegoFloat dot = entity->m_orientation.m_rows[0].m_x;
-	LegoFloat y = entity->m_orientation.m_rows[0].m_y;
-	LegoFloat z = m_velocityDirection.m_z * entity->m_orientation.m_rows[0].m_z;
-	z += y * m_velocityDirection.m_y;
-	dot *= m_velocityDirection.m_x;
-	dot += z;
+	GolVec2 orientation;
+	orientation.m_x = m_carEntity->GetOrientation().m_rows[0].m_x;
+	orientation.m_y = m_carEntity->GetOrientation().m_rows[0].m_y;
+	LegoFloat orientationY = orientation.m_y;
+	LegoFloat dot = m_velocityDirection.m_z;
+	dot *= m_carEntity->GetOrientation().m_rows[0].m_z;
+	LegoFloat y = m_velocityDirection.m_y;
+	y *= orientationY;
+	dot += y;
+	dot += orientation.m_x * m_velocityDirection.m_x;
 	if (dot <= 0.0f) {
 		return FALSE;
 	}

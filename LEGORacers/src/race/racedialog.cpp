@@ -8,10 +8,7 @@
 DECOMP_SIZE_ASSERT(RaceDialog, 0x68)
 
 extern LegoFloat g_cosineTable[1024];
-extern const LegoFloat g_negativeRadiansToTableIndex;
-extern const LegoFloat g_unk0x004b02fc;
 extern const LegoFloat g_selectedPulseAmplitude;
-extern const LegoFloat g_twoPi;
 
 // FUNCTION: LEGORACERS 0x00427160
 RaceDialog::RaceDialog()
@@ -142,26 +139,33 @@ void RaceDialog::Draw()
 		return;
 	}
 
+	ColorRGBA color;
+	LegoS32 y = m_optionsTop - m_lineHeight;
+	LegoS32 selectedAlpha = c_selectedAlpha;
 	const GolRenderTarget* renderTargetInfo = m_renderer->GetRenderTargetInfo();
 	DrawBackdrop();
 
-	LegoS32 selectedAlpha = c_selectedAlpha;
 	if (m_selecting) {
-		LegoFloat blinkPhase = static_cast<LegoFloat>(static_cast<LegoS32>(m_blinkMs)) * g_unk0x004b02fc;
-		blinkPhase *= g_twoPi;
-		blinkPhase *= g_negativeRadiansToTableIndex;
+		LegoFloat blinkPhase = static_cast<LegoFloat>(static_cast<LegoS32>(m_blinkMs)) * 0.002f;
+		blinkPhase *= 6.2831855f;
+		blinkPhase *= -162.97466f;
 
 		LegoS32 index = 0xffffff00 - static_cast<LegoS32>(blinkPhase);
 		index &= c_cosineTableMask;
-		selectedAlpha =
-			c_selectedPulseAlphaCenter + static_cast<LegoS32>(g_cosineTable[index] * g_selectedPulseAmplitude);
+		LegoFloat pulse = g_cosineTable[index];
+		pulse *= g_selectedPulseAmplitude;
+		selectedAlpha = c_selectedPulseAlphaCenter - static_cast<LegoS32>(pulse);
 	}
 
-	m_font->SetColor(c_promptColor);
+	color.m_red = 255;
+	color.m_grn = 255;
+	color.m_blu = 255;
+	color.m_alp = 255;
+	m_font->SetColor(color);
 
-	LegoS32 y = m_optionsTop - m_lineHeight;
-	if (m_extra.HasChars()) {
-		y -= m_lineHeight >> 1;
+	GolString* extra = &m_extra;
+	if (extra->HasChars()) {
+		y -= static_cast<LegoU32>(m_lineHeight) >> 1;
 	}
 
 	LegoS32 textWidth;
@@ -179,10 +183,10 @@ void RaceDialog::Draw()
 	);
 
 	y += m_lineHeight;
-	if (m_extra.HasChars()) {
-		m_font->MeasureString(&m_extra, &textWidth, &textHeight);
+	if (extra->HasChars()) {
+		m_font->MeasureString(extra, &textWidth, &textHeight);
 		m_renderer->DrawString(
-			&m_extra,
+			extra,
 			m_font,
 			(renderTargetInfo->GetWidth() >> 1) - (static_cast<LegoU32>(textWidth) >> 1),
 			y,
@@ -200,7 +204,11 @@ void RaceDialog::Draw()
 
 		LegoS32 x = (renderTargetInfo->GetWidth() >> 1) - (static_cast<LegoU32>(textWidth) >> 1);
 		if (m_selecting && m_selectionIndex == i) {
-			m_font->SetColor(c_selectedColor);
+			color.m_red = 255;
+			color.m_grn = 255;
+			color.m_blu = 36;
+			color.m_alp = 255;
+			m_font->SetColor(color);
 			m_renderer->SetAlphaOverride(selectedAlpha, c_selectedAlphaFlag);
 
 			if (m_blinkMs < c_selectedBlinkThresholdMs) {
@@ -210,14 +218,22 @@ void RaceDialog::Draw()
 			m_renderer->ClearAlphaOverride();
 		}
 		else {
-			m_font->SetColor(c_optionColor);
+			color.m_red = 127;
+			color.m_grn = 127;
+			color.m_blu = 18;
+			color.m_alp = 255;
+			m_font->SetColor(color);
 			m_renderer->DrawString(option, m_font, x, y, 1.0f, 1.0f, NULL, 0);
 		}
 
 		y += m_lineHeight;
 	}
 
-	m_font->SetColor(c_promptColor);
+	color.m_red = 255;
+	color.m_grn = 255;
+	color.m_blu = 255;
+	color.m_alp = 255;
+	m_font->SetColor(color);
 }
 
 // FUNCTION: LEGORACERS 0x004276c0

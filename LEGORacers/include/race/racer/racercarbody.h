@@ -117,37 +117,11 @@ public:
 		GolVec3 m_surfaceForce;              // 0x64
 	};
 
-	// SIZE 0x1f8
-	class SavedWheelStateBlock {
+	// SIZE 0x3c
+	class SavedBodyPoints {
 	public:
-		SavedWheelState* GetEntries() { return m_entries; }
-		GolBoundingVolume::HitTriangle* GetEventContext() { return &m_eventContext; }
-
-		union {
-			SavedWheelState m_entries[4]; // 0x000
-			struct {
-				undefined m_unk0x000[0x1c0 - 0x000];           // 0x000
-				GolBoundingVolume::HitTriangle m_eventContext; // 0x1c0
-				undefined m_unk0x1f4[0x1f8 - 0x1f4];           // 0x1f4
-			};
-		};
-	};
-
-	// SIZE 0xf4
-	class SavedState {
-	public:
-		GolVec3 m_bodyPointsWorld[4];     // 0x00
-		GolVec3 m_facingDirection;        // 0x30
-		undefined4 m_unk0x03c;            // 0x3c
-		GolVec3 m_rayEndsLocal[4];        // 0x40
-		GolVec3 m_rayStartsLocal[4];      // 0x70
-		GolVec3 m_angularMomentum;        // 0xa0
-		LegoFloat m_slideLift;            // 0xac
-		LegoFloat m_slideBankAngle;       // 0xb0
-		undefined4 m_unk0x0b4;            // 0xb4
-		GolVec3 m_contactForce;           // 0xb8
-		GolMatrix3 m_worldInverseInertia; // 0xc4
-		GolVec3 m_angularVelocity;        // 0xe8
+		GolVec3 m_bodyPointsWorld[4]; // 0x00
+		GolVec3 m_facingDirection;    // 0x30
 	};
 
 	void Update(LegoS32 p_elapsedMs) override; // vtable+0x04
@@ -177,6 +151,9 @@ public:
 	virtual void EndExternalForce1();                   // vtable+0x4c
 
 	LegoFloat GetForwardSpeed() const { return m_forwardSpeed; }
+	LegoFloat GetTurnRadius() const { return m_turnRadius; }
+	LegoFloat GetSpeed() const { return m_speed; }
+	void SetSoundsEnabled(LegoU32 p_soundsEnabled) { m_soundsEnabled = p_soundsEnabled; }
 
 	void Reset();
 	void Initialize(
@@ -311,19 +288,24 @@ public:
 	LegoFloat m_slideLift;                                          // 0x658
 	LegoFloat m_slideLiftTarget;                                    // 0x65c
 	LegoFloat m_slideLiftRate;                                      // 0x660
-	GolVec3 m_frontAxleMid;                                         // 0x664
-	GolVec3 m_rearAxleMid;                                          // 0x670
-	LegoFloat m_slideBankTarget;                                    // 0x67c
-	LegoFloat m_slideBankAngle;                                     // 0x680
-	GolVec3 m_savedVelocity;                                        // 0x684
-	GolVec3 m_savedPosition;                                        // 0x690
-	GolMatrix3 m_savedOrientation;                                  // 0x69c
-	LegoU32 m_flags;                                                // 0x6c0
-	LegoFloat m_steeringGain;                                       // 0x6c4
-	LegoFloat m_steeringAlignmentMin;                               // 0x6c8
-	LegoFloat m_facingLagMax;                                       // 0x6cc
-	LegoFloat m_slipRatio;                                          // 0x6d0
-	LegoFloat m_visualBankAngle;                                    // 0x6d4
+	union {
+		struct {
+			GolVec3 m_frontAxleMid; // 0x664
+			GolVec3 m_rearAxleMid;  // 0x670
+		};
+		GolVec3 m_axleMidpoints[2]; // 0x664
+	};
+	LegoFloat m_slideBankTarget;      // 0x67c
+	LegoFloat m_slideBankAngle;       // 0x680
+	GolVec3 m_savedVelocity;          // 0x684
+	GolVec3 m_savedPosition;          // 0x690
+	GolMatrix3 m_savedOrientation;    // 0x69c
+	LegoU32 m_flags;                  // 0x6c0
+	LegoFloat m_steeringGain;         // 0x6c4
+	LegoFloat m_steeringAlignmentMin; // 0x6c8
+	LegoFloat m_facingLagMax;         // 0x6cc
+	LegoFloat m_slipRatio;            // 0x6d0
+	LegoFloat m_visualBankAngle;      // 0x6d4
 	union {
 		LegoU32 m_powerslideFactorBits; // 0x6d8
 		LegoFloat m_powerslideFactor;   // 0x6d8

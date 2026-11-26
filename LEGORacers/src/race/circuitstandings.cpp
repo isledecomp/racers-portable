@@ -126,9 +126,9 @@ void CircuitStandings::FormatTime(LegoChar* p_buffer, LegoU32 p_time)
 	LegoU32 millisecondsPerHour = 3600000;
 	LegoS32 divisor = 10;
 	LegoS32 digitOffset;
-	LegoU32 time = p_time % millisecondsPerHour;
 
 	p_buffer[8] = '\0';
+	LegoU32 time = p_time % millisecondsPerHour;
 	if (time >= 600000) {
 		digitOffset = 7;
 		p_buffer[5] = ':';
@@ -162,7 +162,13 @@ void CircuitStandings::FormatTime(LegoChar* p_buffer, LegoU32 p_time)
 // FUNCTION: LEGORACERS 0x00440350
 void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 {
+	LegoS32 rank;
+	LegoS32 sign;
+	LegoU32 bestScore;
 	GolString string;
+	LegoU32 selectedIndex = 0;
+	LegoS32 textWidth;
+	LegoS32 textHeight;
 	LegoChar timeBuffer[12];
 	LegoChar buffer[64];
 	LegoU32 selected[c_racerCount];
@@ -174,17 +180,13 @@ void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 		return;
 	}
 
-	Racer* racers = m_raceState->GetRacers();
-
 	if (p_showCircuitPoints) {
 		string.CopyFromBufSelection(m_stringTable->GetStringBuffer(c_titleStringId), 0);
-		LegoS32 textWidth;
-		LegoS32 textHeight;
 		m_font->MeasureString(&string, &textWidth, &textHeight);
 		renderer->DrawString(
 			&string,
 			m_font,
-			(renderTargetInfo->GetWidth() >> 1) - (static_cast<LegoU32>(textWidth) >> 1),
+			(renderTargetInfo->GetWidthU32() >> 1) - (static_cast<LegoU32>(textWidth) >> 1),
 			c_titleY,
 			1.0f,
 			1.0f,
@@ -192,11 +194,10 @@ void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 			0
 		);
 
-		LegoS32 rank = 0;
 		::memset(selected, 0, sizeof(selected));
-		for (LegoU32 y = c_rowStartY; y < c_rowEndY; y += c_rowStepY) {
-			LegoU32 selectedIndex = 0;
-			LegoU32 bestScore = 0;
+		for (rank = 0; rank < c_racerCount; rank++) {
+			LegoU32 y = c_rowStartY + rank * c_rowStepY;
+			bestScore = 0;
 
 			for (LegoU32 i = 0; i < c_racerCount; i++) {
 				if (!selected[i] && m_points[i] > bestScore) {
@@ -210,36 +211,42 @@ void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 				::sprintf(buffer, "%ld", rank + 1);
 				renderer->DrawCString(buffer, m_font, c_rankX, y, 1.0f, 1.0f, NULL, 0);
 
-				Racer* selectedRacer = &racers[selectedIndex];
-				renderer->DrawString(&selectedRacer->m_displayName, m_font, c_racerNameX, y, 1.0f, 1.0f, NULL, 0);
+				renderer->DrawString(
+					&m_raceState->GetRacer(selectedIndex)->m_displayName,
+					m_font,
+					c_racerNameX,
+					y,
+					1.0f,
+					1.0f,
+					NULL,
+					0
+				);
 
 				::sprintf(buffer, "%ld", m_points[selectedIndex]);
 				renderer->DrawCString(buffer, m_font, c_pointsX, y, 1.0f, 1.0f, NULL, 0);
 			}
 
 			selected[selectedIndex] = TRUE;
-			rank++;
 		}
 	}
 	else {
-		LegoU32 leaderIndex = 0;
+		selectedIndex = 0;
+		sign = 1;
 		LegoU32 leaderScore = 0;
 		for (LegoU32 i = 0; i < c_racerCount; i++) {
 			if (m_roundPoints[i] >= leaderScore) {
 				leaderScore = m_roundPoints[i];
-				leaderIndex = i;
+				selectedIndex = i;
 			}
 		}
 
-		Racer* leaderRacer = &racers[leaderIndex];
+		Racer* leaderRacer = m_raceState->GetRacer(selectedIndex);
 		leaderRacer->ComputeStandingsDeltas(deltaEntries);
 
-		LegoS32 sign = 1;
-		LegoS32 rank = 0;
 		::memset(selected, 0, sizeof(selected));
-		for (LegoU32 y = c_rowStartY; y < c_rowEndY; y += c_rowStepY) {
-			LegoU32 selectedIndex = leaderIndex;
-			LegoU32 bestScore = 0;
+		for (rank = 0; rank < c_racerCount; rank++) {
+			LegoU32 y = c_rowStartY + rank * c_rowStepY;
+			bestScore = 0;
 
 			for (LegoU32 i = 0; i < c_racerCount; i++) {
 				if (!selected[i] && m_roundPoints[i] >= bestScore) {
@@ -253,37 +260,38 @@ void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 				::sprintf(buffer, "%ld", rank + 1);
 				renderer->DrawCString(buffer, m_font, c_rankX, y, 1.0f, 1.0f, NULL, 0);
 
-				Racer* selectedRacer = &racers[selectedIndex];
-				renderer->DrawString(&selectedRacer->m_displayName, m_font, c_racerNameX, y, 1.0f, 1.0f, NULL, 0);
+				renderer->DrawString(
+					&m_raceState->GetRacer(selectedIndex)->m_displayName,
+					m_font,
+					c_racerNameX,
+					y,
+					1.0f,
+					1.0f,
+					NULL,
+					0
+				);
 
 				::sprintf(buffer, "%ld", m_roundPoints[selectedIndex]);
 				renderer->DrawCString(buffer, m_font, c_pointsX, y, 1.0f, 1.0f, NULL, 0);
 
 				LegoU32 deltaIndex = 0;
-				while (deltaIndex < c_racerCount && deltaEntries[deltaIndex].m_racer != selectedRacer) {
+				Racer* selectedRacer = &m_raceState->GetRacers()[selectedIndex];
+				while (deltaEntries[deltaIndex].m_racer != selectedRacer && deltaIndex < c_racerCount) {
 					deltaIndex++;
 				}
 
-				if (deltaIndex < c_racerCount) {
-					Racer::StandingsDeltaEntry* deltaEntry = &deltaEntries[deltaIndex];
-					if (deltaEntry->m_racer == leaderRacer) {
-						string.CopyFromBufSelection(m_stringTable->GetStringBuffer(c_leaderStringId), 0);
-						renderer->DrawString(&string, m_font, c_deltaSignX, y, 1.0f, 1.0f, NULL, 0);
-					}
-					else if (deltaEntry->m_racer->m_flags & Racer::c_flagFinished) {
-						LegoS32 delta = deltaEntry->m_delta;
-						if (delta <= 0) {
-							if (delta < 0) {
-								sign = -1;
-								delta = -delta;
-								deltaEntry->m_delta = delta;
-							}
-						}
-						else {
+				if (deltaEntries[deltaIndex].m_racer != leaderRacer) {
+					if (deltaEntries[deltaIndex].m_racer->m_flags & Racer::c_flagFinished) {
+						LegoS32 delta = deltaEntries[deltaIndex].m_delta;
+						if (delta > 0) {
 							sign = 1;
 						}
+						else if (delta < 0) {
+							sign = -1;
+							deltaEntries[deltaIndex].m_delta = -delta;
+						}
 
-						FormatTime(timeBuffer, delta);
+						FormatTime(timeBuffer, deltaEntries[deltaIndex].m_delta);
 						renderer->DrawCString(timeBuffer, m_font, c_deltaTimeX, y, 1.0f, 1.0f, NULL, 0);
 
 						if (sign == 1) {
@@ -308,10 +316,13 @@ void CircuitStandings::Draw(LegoBool32 p_showCircuitPoints)
 						renderer->DrawString(&string, m_font, c_deltaSignX, y, 1.0f, 1.0f, NULL, 0);
 					}
 				}
+				else {
+					string.CopyFromBufSelection(m_stringTable->GetStringBuffer(c_leaderStringId), 0);
+					renderer->DrawString(&string, m_font, c_deltaSignX, y, 1.0f, 1.0f, NULL, 0);
+				}
 			}
 
 			selected[selectedIndex] = TRUE;
-			rank++;
 		}
 	}
 }

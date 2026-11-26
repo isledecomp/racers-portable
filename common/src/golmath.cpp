@@ -1,12 +1,8 @@
 #include "golmath.h"
 
-#include <math.h>
+#include "compat.h"
 
-#ifdef BUILDING_GOL
-static const LegoFloat g_two = 2.0f;
-#else
-extern const LegoFloat g_two;
-#endif
+#include <math.h>
 
 DECOMP_SIZE_ASSERT(GolVec2, 0x8)
 DECOMP_SIZE_ASSERT(GolVec3, 0xc)
@@ -16,7 +12,8 @@ DECOMP_SIZE_ASSERT(GolVec4, 0x10)
 DECOMP_SIZE_ASSERT(GolMatrix3, 0x24)
 DECOMP_SIZE_ASSERT(GolMatrix34, 0x30)
 
-// FUNCTION: GOLDP 0x1002f3a0
+#ifdef COMPAT_MODE
+
 void GolMath::MultiplyMatrix4(const GolMatrix4& p_left, const GolMatrix4& p_right, GolMatrix4* p_dest)
 {
 	LegoU32 i;
@@ -46,7 +43,86 @@ void GolMath::MultiplyMatrix4(const GolMatrix4& p_left, const GolMatrix4& p_righ
 	}
 }
 
-// FUNCTION: GOLDP 0x1002f450
+#else
+
+// FUNCTION: GOLDP 0x1002f3a0
+__declspec(naked) void GolMath::MultiplyMatrix4(const GolMatrix4& p_left, const GolMatrix4& p_right, GolMatrix4* p_dest)
+{
+	__asm {
+		mov ecx, dword ptr [esp + 4]
+		mov edx, dword ptr [esp + 8]
+		mov eax, dword ptr [esp + 0xc]
+		push ebp
+		push ebx
+		mov ebp, 4
+	rowLoop:
+		fld dword ptr [ecx]
+		fmul dword ptr [edx]
+		fld dword ptr [ecx]
+		fmul dword ptr [edx + 4]
+		fld dword ptr [ecx]
+		fmul dword ptr [edx + 8]
+		fld dword ptr [ecx]
+		fmul dword ptr [edx + 0xc]
+		fld dword ptr [ecx + 4]
+		fmul dword ptr [edx + 0x10]
+		fld dword ptr [ecx + 4]
+		dec ebp
+		mov ebx, dword ptr [eax]
+		fmul dword ptr [edx + 0x14]
+		fld dword ptr [ecx + 4]
+		fmul dword ptr [edx + 0x18]
+		fld dword ptr [ecx + 4]
+		fmul dword ptr [edx + 0x1c]
+		fxch st(3)
+		faddp st(7), st
+		faddp st(4), st
+		faddp st(4), st
+		faddp st(1), st
+		fld dword ptr [ecx + 8]
+		fmul dword ptr [edx + 0x20]
+		fld dword ptr [ecx + 8]
+		fmul dword ptr [edx + 0x24]
+		fld dword ptr [ecx + 8]
+		fmul dword ptr [edx + 0x28]
+		fld dword ptr [ecx + 8]
+		fmul dword ptr [edx + 0x2c]
+		fxch st(3)
+		faddp st(7), st
+		faddp st(4), st
+		faddp st(4), st
+		faddp st(1), st
+		fld dword ptr [ecx + 0xc]
+		fmul dword ptr [edx + 0x30]
+		fld dword ptr [ecx + 0xc]
+		fmul dword ptr [edx + 0x34]
+		fld dword ptr [ecx + 0xc]
+		fmul dword ptr [edx + 0x38]
+		fld dword ptr [ecx + 0xc]
+		fmul dword ptr [edx + 0x3c]
+		fxch st(3)
+		faddp st(7), st
+		faddp st(4), st
+		faddp st(4), st
+		faddp st(1), st
+		fxch st(3)
+		fstp dword ptr [eax]
+		fstp dword ptr [eax + 8]
+		fstp dword ptr [eax + 4]
+		fstp dword ptr [eax + 0xc]
+		lea ecx, [ecx + 0x10]
+		lea eax, [eax + 0x10]
+		jne rowLoop
+		pop ebx
+		pop ebp
+		ret
+	}
+}
+
+#endif
+
+#ifdef COMPAT_MODE
+
 void GolMath::MultiplyMatrix4Affine(const GolMatrix4& p_left, const GolMatrix4& p_right, GolMatrix4* p_dest)
 {
 	LegoU32 i;
@@ -62,60 +138,111 @@ void GolMath::MultiplyMatrix4Affine(const GolMatrix4& p_left, const GolMatrix4& 
 	}
 }
 
-// FUNCTION: LEGORACERS 0x00449170
+#else
+
+// FUNCTION: GOLDP 0x1002f450
+__declspec(naked) void GolMath::MultiplyMatrix4Affine(
+	const GolMatrix4& p_left,
+	const GolMatrix4& p_right,
+	GolMatrix4* p_dest
+)
+{
+	__asm {
+		mov ecx, dword ptr [esp + 4]
+		mov edx, dword ptr [esp + 8]
+		mov eax, dword ptr [esp + 0xc]
+		push ebp
+		mov ebp, 3
+	columnLoop:
+		fld dword ptr [ecx + 0x30]
+		fmul dword ptr [edx]
+		fld dword ptr [ecx + 0x20]
+		fmul dword ptr [edx]
+		fld dword ptr [ecx + 0x10]
+		fmul dword ptr [edx]
+		fld dword ptr [ecx]
+		fmul dword ptr [edx]
+		fld dword ptr [ecx + 0x34]
+		fmul dword ptr [edx + 0x10]
+		fld dword ptr [ecx + 0x24]
+		fmul dword ptr [edx + 0x10]
+		fld dword ptr [ecx + 0x14]
+		fmul dword ptr [edx + 0x10]
+		fld dword ptr [ecx + 4]
+		fmul dword ptr [edx + 0x10]
+		fxch st(3)
+		faddp st(7), st
+		faddp st(4), st
+		faddp st(4), st
+		faddp st(1), st
+		fld dword ptr [ecx + 0x38]
+		fmul dword ptr [edx + 0x20]
+		fld dword ptr [ecx + 0x28]
+		fmul dword ptr [edx + 0x20]
+		fld dword ptr [ecx + 0x18]
+		fmul dword ptr [edx + 0x20]
+		fld dword ptr [ecx + 8]
+		fmul dword ptr [edx + 0x20]
+		fxch st(1)
+		faddp st(5), st
+		fld dword ptr [edx + 0x30]
+		faddp st(7), st
+		faddp st(3), st
+		faddp st(4), st
+		faddp st(4), st
+		fstp dword ptr [eax]
+		fstp dword ptr [eax + 0x10]
+		fstp dword ptr [eax + 0x20]
+		fstp dword ptr [eax + 0x30]
+		dec ebp
+		lea edx, [edx + 4]
+		lea eax, [eax + 4]
+		jne columnLoop
+		pop ebp
+		ret
+	}
+}
+
+#endif
+
+#ifdef COMPAT_MODE
+
 void GolMath::SinCos(LegoFloat p_angle, LegoFloat* p_sin, LegoFloat* p_cos)
 {
 	*p_sin = static_cast<LegoFloat>(sin(p_angle));
 	*p_cos = static_cast<LegoFloat>(cos(p_angle));
 }
 
+#else
+
+// FUNCTION: LEGORACERS 0x00449170
+__declspec(naked) void GolMath::SinCos(LegoFloat p_angle, LegoFloat* p_sin, LegoFloat* p_cos)
+{
+	__asm {
+		fld dword ptr [esp + 4]
+		fsincos
+		mov ecx, dword ptr [esp + 0xc]
+		mov edx, dword ptr [esp + 8]
+		fstp dword ptr [ecx]
+		fstp dword ptr [edx]
+		ret
+	}
+}
+
+#endif
+
 // FUNCTION: LEGORACERS 0x00449190
 void GolMath::MultiplyMatrix3(const LegoFloat* p_left, const LegoFloat* p_right, LegoFloat* p_dest)
 {
-	LegoFloat value = p_left[1] * p_right[3];
-	value += p_left[2] * p_right[6];
-	value += p_left[0] * p_right[0];
-	p_dest[0] = value;
-
-	value = p_right[4] * p_left[1];
-	value += p_right[7] * p_left[2];
-	value += p_right[1] * p_left[0];
-	p_dest[1] = value;
-
-	value = p_right[8] * p_left[2];
-	value += p_left[1] * p_right[5];
-	value += p_right[2] * p_left[0];
-	p_dest[2] = value;
-
-	value = p_left[4] * p_right[3];
-	value += p_left[5] * p_right[6];
-	value += p_left[3] * p_right[0];
-	p_dest[3] = value;
-
-	value = p_left[5] * p_right[7];
-	value += p_left[3] * p_right[1];
-	value += p_left[4] * p_right[4];
-	p_dest[4] = value;
-
-	value = p_left[3] * p_right[2];
-	value += p_right[8] * p_left[5];
-	value += p_left[4] * p_right[5];
-	p_dest[5] = value;
-
-	value = p_left[8] * p_right[6];
-	value += p_right[3] * p_left[7];
-	value += p_left[6] * p_right[0];
-	p_dest[6] = value;
-
-	value = p_right[1] * p_left[6];
-	value += p_left[8] * p_right[7];
-	value += p_right[4] * p_left[7];
-	p_dest[7] = value;
-
-	value = p_left[7] * p_right[5];
-	value += p_left[8] * p_right[8];
-	value += p_left[6] * p_right[2];
-	p_dest[8] = value;
+	p_dest[0] = GOL_MUL(p_left[1], p_right[3]) + GOL_MUL(p_left[2], p_right[6]) + GOL_MUL(p_left[0], p_right[0]);
+	p_dest[1] = GOL_MUL(p_right[4], p_left[1]) + GOL_MUL(p_right[7], p_left[2]) + GOL_MUL(p_right[1], p_left[0]);
+	p_dest[2] = GOL_MUL(p_right[8], p_left[2]) + GOL_MUL(p_left[1], p_right[5]) + GOL_MUL(p_right[2], p_left[0]);
+	p_dest[3] = GOL_MUL(p_left[4], p_right[3]) + GOL_MUL(p_left[5], p_right[6]) + GOL_MUL(p_left[3], p_right[0]);
+	p_dest[4] = GOL_MUL(p_left[5], p_right[7]) + GOL_MUL(p_left[3], p_right[1]) + GOL_MUL(p_left[4], p_right[4]);
+	p_dest[5] = GOL_MUL(p_left[3], p_right[2]) + GOL_MUL(p_right[8], p_left[5]) + GOL_MUL(p_left[4], p_right[5]);
+	p_dest[6] = GOL_MUL(p_left[8], p_right[6]) + GOL_MUL(p_right[3], p_left[7]) + GOL_MUL(p_left[6], p_right[0]);
+	p_dest[7] = GOL_MUL(p_right[1], p_left[6]) + GOL_MUL(p_left[8], p_right[7]) + GOL_MUL(p_right[4], p_left[7]);
+	p_dest[8] = GOL_MUL(p_left[7], p_right[5]) + GOL_MUL(p_left[8], p_right[8]) + GOL_MUL(p_left[6], p_right[2]);
 }
 
 // FUNCTION: GOLDP 0x1002f4e0
@@ -172,25 +299,19 @@ void GolMath::QuatToMatrix3(const GolQuat* p_quat, LegoFloat* p_dest)
 	LegoFloat y = p_quat->m_y;
 	LegoFloat z = p_quat->m_z;
 	LegoFloat w = p_quat->m_w;
-	LegoFloat scale = g_two / (w * w + z * z + y * y + x * x);
-	LegoFloat sx = scale * p_quat->m_x;
-	LegoFloat sy = p_quat->m_y;
-	sy *= scale;
-	LegoFloat sz = scale * p_quat->m_z;
-	LegoFloat wx = p_quat->m_w;
-	wx *= sx;
-	LegoFloat wy = p_quat->m_w;
-	wy *= sy;
-	LegoFloat wz = p_quat->m_w;
-	wz *= sz;
-	LegoFloat xx = sx * p_quat->m_x;
-	LegoFloat xy = sy * p_quat->m_x;
-	LegoFloat xz = sz * p_quat->m_x;
-	LegoFloat yy = p_quat->m_y;
-	yy *= sy;
-	LegoFloat yz = p_quat->m_y;
-	yz *= sz;
-	LegoFloat zz = sz * p_quat->m_z;
+	LegoFloat scale = 2.0f / (w * w + z * z + y * y + x * x);
+	LegoFloat sx = GOL_MUL(scale, p_quat->m_x);
+	LegoFloat sy = GOL_MUL(p_quat->m_y, scale);
+	LegoFloat sz = GOL_MUL(scale, p_quat->m_z);
+	LegoFloat wx = GOL_MUL(p_quat->m_w, sx);
+	LegoFloat wy = GOL_MUL(p_quat->m_w, sy);
+	LegoFloat wz = GOL_MUL(p_quat->m_w, sz);
+	LegoFloat xx = GOL_MUL(sx, p_quat->m_x);
+	LegoFloat xy = GOL_MUL(sy, p_quat->m_x);
+	LegoFloat xz = GOL_MUL(sz, p_quat->m_x);
+	LegoFloat yy = GOL_MUL(p_quat->m_y, sy);
+	LegoFloat yz = GOL_MUL(p_quat->m_y, sz);
+	LegoFloat zz = GOL_MUL(sz, p_quat->m_z);
 
 	p_dest[0] = 1.0f - (zz + yy);
 	p_dest[1] = xy - wz;
@@ -334,134 +455,121 @@ void GolMath::RotateAboutAxis(const GolVec3* p_src, GolVec3* p_dest, const GolVe
 	LegoFloat oneMinusC = 1.0f - c;
 	LegoFloat matrix[3][3];
 
-	LegoFloat xy = p_axis->m_y;
-	xy *= p_axis->m_x;
-	xy *= oneMinusC;
-	LegoFloat xz = p_axis->m_z;
-	xz *= p_axis->m_x;
-	xz *= oneMinusC;
-	LegoFloat yz = p_axis->m_z * p_axis->m_y;
-	yz *= oneMinusC;
-	LegoFloat xs = s * p_axis->m_x;
-	LegoFloat ys = p_axis->m_y;
-	ys *= s;
-	LegoFloat zs = s * p_axis->m_z;
+	LegoFloat xy = GOL_MUL(GOL_MUL(p_axis->m_y, p_axis->m_x), oneMinusC);
+	LegoFloat xz = GOL_MUL(GOL_MUL(p_axis->m_z, p_axis->m_x), oneMinusC);
+	LegoFloat yz = GOL_MUL(GOL_MUL(p_axis->m_z, p_axis->m_y), oneMinusC);
+	LegoFloat xs = GOL_MUL(s, p_axis->m_x);
+	LegoFloat ys = GOL_MUL(p_axis->m_y, s);
+	LegoFloat zs = GOL_MUL(s, p_axis->m_z);
 
-	matrix[0][0] = p_axis->m_x * p_axis->m_x * oneMinusC + c;
+	matrix[0][0] = GOL_MUL(GOL_MUL(p_axis->m_x, p_axis->m_x), oneMinusC) + c;
 	matrix[0][1] = xy + zs;
 	matrix[0][2] = xz - ys;
 	matrix[1][0] = xy - zs;
-	matrix[1][1] = p_axis->m_y * p_axis->m_y * oneMinusC + c;
+	matrix[1][1] = GOL_MUL(GOL_MUL(p_axis->m_y, p_axis->m_y), oneMinusC) + c;
 	matrix[1][2] = yz + xs;
 	matrix[2][0] = xz + ys;
 	matrix[2][1] = yz - xs;
-	GolVec3* dest = p_dest;
-	matrix[2][2] = p_axis->m_z * p_axis->m_z * oneMinusC + c;
+	matrix[2][2] = GOL_MUL(GOL_MUL(p_axis->m_z, p_axis->m_z), oneMinusC) + c;
 
-	dest->m_x = src.m_z * matrix[0][2] + src.m_y * matrix[0][1] + src.m_x * matrix[0][0];
-	dest->m_y = src.m_z * matrix[1][2] + src.m_y * matrix[1][1] + src.m_x * matrix[1][0];
-	dest->m_z = src.m_z * matrix[2][2] + src.m_y * matrix[2][1] + src.m_x * matrix[2][0];
+	p_dest->m_x = GOL_MUL(src.m_z, matrix[0][2]) + GOL_MUL(src.m_y, matrix[0][1]) + GOL_MUL(src.m_x, matrix[0][0]);
+	p_dest->m_y = GOL_MUL(src.m_z, matrix[1][2]) + GOL_MUL(src.m_y, matrix[1][1]) + GOL_MUL(src.m_x, matrix[1][0]);
+	p_dest->m_z = GOL_MUL(src.m_z, matrix[2][2]) + GOL_MUL(src.m_y, matrix[2][1]) + GOL_MUL(src.m_x, matrix[2][0]);
 }
 
 // FUNCTION: LEGORACERS 0x004497f0
 LegoBool32 GolMath::PointInTriangle(const GolVec3* p_point, const LegoFloat* p_triangle)
 {
 	LegoFloat normalX = p_triangle[9];
-	if (normalX < 0.0f) {
-		normalX = -normalX;
+	if (p_triangle[9] < 0.0f) {
+		normalX = -p_triangle[9];
 	}
 
 	LegoFloat normalY = p_triangle[10];
-	if (normalY < 0.0f) {
-		normalY = -normalY;
+	if (p_triangle[10] < 0.0f) {
+		normalY = -p_triangle[10];
 	}
 
 	LegoFloat normalZ = p_triangle[11];
-	if (normalZ < 0.0f) {
-		normalZ = -normalZ;
+	if (p_triangle[11] < 0.0f) {
+		normalZ = -p_triangle[11];
 	}
 
-	LegoFloat a0;
-	LegoFloat a1;
-	LegoFloat b0;
-	LegoFloat b1;
-	LegoFloat c0;
-	LegoFloat c1;
-	LegoFloat point0;
-	LegoFloat point1;
+	GolVec2 projected[4];
 
 	if (normalX > normalY) {
 		if (normalZ > normalX) {
-			a0 = p_triangle[0];
-			a1 = p_triangle[1];
-			b0 = p_triangle[3];
-			b1 = p_triangle[4];
-			c0 = p_triangle[6];
-			c1 = p_triangle[7];
-			point0 = p_point->m_x;
-			point1 = p_point->m_y;
+			projected[1].m_x = p_triangle[0];
+			projected[1].m_y = p_triangle[1];
+			projected[2].m_x = p_triangle[3];
+			projected[2].m_y = p_triangle[4];
+			projected[3].m_x = p_triangle[6];
+			projected[3].m_y = p_triangle[7];
+			projected[0].m_x = p_point->m_x;
+			projected[0].m_y = p_point->m_y;
 		}
 		else {
-			a0 = p_triangle[1];
-			a1 = p_triangle[2];
-			b0 = p_triangle[4];
-			b1 = p_triangle[5];
-			c0 = p_triangle[7];
-			c1 = p_triangle[8];
-			point0 = p_point->m_y;
-			point1 = p_point->m_z;
+			projected[1].m_x = p_triangle[1];
+			projected[1].m_y = p_triangle[2];
+			projected[2].m_x = p_triangle[4];
+			projected[2].m_y = p_triangle[5];
+			projected[3].m_x = p_triangle[7];
+			projected[3].m_y = p_triangle[8];
+			projected[0].m_x = p_point->m_y;
+			projected[0].m_y = p_point->m_z;
 		}
 	}
 	else if (normalZ > normalY) {
-		a0 = p_triangle[0];
-		a1 = p_triangle[1];
-		b0 = p_triangle[3];
-		b1 = p_triangle[4];
-		c0 = p_triangle[6];
-		c1 = p_triangle[7];
-		point0 = p_point->m_x;
-		point1 = p_point->m_y;
+		projected[1].m_x = p_triangle[0];
+		projected[1].m_y = p_triangle[1];
+		projected[2].m_x = p_triangle[3];
+		projected[2].m_y = p_triangle[4];
+		projected[3].m_x = p_triangle[6];
+		projected[3].m_y = p_triangle[7];
+		projected[0].m_x = p_point->m_x;
+		projected[0].m_y = p_point->m_y;
 	}
 	else {
-		a0 = p_triangle[0];
-		a1 = p_triangle[2];
-		b0 = p_triangle[3];
-		b1 = p_triangle[5];
-		c0 = p_triangle[6];
-		c1 = p_triangle[8];
-		point0 = p_point->m_x;
-		point1 = p_point->m_z;
+		projected[1].m_x = p_triangle[0];
+		projected[1].m_y = p_triangle[2];
+		projected[2].m_x = p_triangle[3];
+		projected[2].m_y = p_triangle[5];
+		projected[3].m_x = p_triangle[6];
+		projected[3].m_y = p_triangle[8];
+		projected[0].m_x = p_point->m_x;
+		projected[0].m_y = p_point->m_z;
 	}
 
-	LegoFloat edgeAC0 = a0 - c0;
-	LegoFloat edgeAC1 = c1 - a1;
-	LegoFloat edgeACDotC = edgeAC0 * c1 + edgeAC1 * c0;
-	LegoFloat edgeAB0 = b0 - a0;
-	LegoFloat edgeAB1 = a1 - b1;
-	LegoFloat edgeABDotB = edgeAB0 * a1 + edgeAB1 * a0;
-	LegoFloat edgeCB0 = c0 - b0;
-	LegoFloat edgeCB1 = b1 - c1;
-	LegoFloat edgeCBDotC = edgeCB0 * b1 + edgeCB1 * b0;
+	LegoFloat edgeAC1 = projected[3].m_y - projected[1].m_y;
+	LegoFloat edgeAC0 = projected[1].m_x - projected[3].m_x;
+	LegoFloat edgeConstants[3];
+	edgeConstants[0] = edgeAC0 * projected[3].m_y + edgeAC1 * projected[3].m_x;
+	LegoFloat edgeAB1 = projected[1].m_y - projected[2].m_y;
+	LegoFloat edgeAB0 = projected[2].m_x - projected[1].m_x;
+	edgeConstants[1] = edgeAB0 * projected[1].m_y + edgeAB1 * projected[1].m_x;
+	LegoFloat edgeCB1 = projected[2].m_y - projected[3].m_y;
+	LegoFloat edgeCB0 = projected[3].m_x - projected[2].m_x;
+	edgeConstants[2] = edgeCB0 * projected[2].m_y + edgeCB1 * projected[2].m_x;
 
-	if (edgeCB0 * edgeAB1 > edgeCB1 * edgeAB0) {
-		if (edgeAC0 * point1 + edgeAC1 * point0 < edgeACDotC) {
+	if (edgeCB1 * edgeAB0 < edgeCB0 * edgeAB1) {
+		if (edgeAC0 * projected[0].m_y + edgeAC1 * projected[0].m_x < edgeConstants[0]) {
 			return FALSE;
 		}
-		if (edgeAB0 * point1 + edgeAB1 * point0 < edgeABDotB) {
+		if (edgeAB0 * projected[0].m_y + edgeAB1 * projected[0].m_x < edgeConstants[1]) {
 			return FALSE;
 		}
-		if (edgeCB0 * point1 + edgeCB1 * point0 < edgeCBDotC) {
+		if (edgeCB0 * projected[0].m_y + edgeCB1 * projected[0].m_x < edgeConstants[2]) {
 			return FALSE;
 		}
 	}
 	else {
-		if (edgeAC0 * point1 + edgeAC1 * point0 > edgeACDotC) {
+		if (edgeAC0 * projected[0].m_y + edgeAC1 * projected[0].m_x > edgeConstants[0]) {
 			return FALSE;
 		}
-		if (edgeAB0 * point1 + edgeAB1 * point0 > edgeABDotB) {
+		if (edgeAB0 * projected[0].m_y + edgeAB1 * projected[0].m_x > edgeConstants[1]) {
 			return FALSE;
 		}
-		if (edgeCB0 * point1 + edgeCB1 * point0 > edgeCBDotC) {
+		if (edgeCB0 * projected[0].m_y + edgeCB1 * projected[0].m_x > edgeConstants[2]) {
 			return FALSE;
 		}
 	}
@@ -515,67 +623,47 @@ LegoBool32 GolMath::MoveToward(
 // FUNCTION: LEGORACERS 0x00449b90
 void GolMath::TransformVector(GolVec3 p_src, const LegoFloat* p_matrix, GolVec3* p_dest)
 {
-	LegoFloat x = p_matrix[2] * p_src.m_z;
-	x += p_matrix[1] * p_src.m_y;
-	x += p_src.m_x * p_matrix[0];
+	LegoFloat term = p_matrix[1];
+	term *= p_src.m_y;
+	LegoFloat x = p_matrix[2];
+	x *= p_src.m_z;
+	x += term;
+	term = p_src.m_x;
+	term *= p_matrix[0];
+	x += term;
 	p_dest->m_x = x;
 
-	LegoFloat y = p_matrix[5] * p_src.m_z;
-	y += p_matrix[4] * p_src.m_y;
-	y += p_matrix[3] * p_src.m_x;
+	term = p_matrix[4];
+	term *= p_src.m_y;
+	LegoFloat y = p_matrix[5];
+	y *= p_src.m_z;
+	y += term;
+	term = p_matrix[3];
+	term *= p_src.m_x;
+	y += term;
 	p_dest->m_y = y;
 
-	LegoFloat z = p_matrix[8] * p_src.m_z;
-	z += p_matrix[7] * p_src.m_y;
-	z += p_matrix[6] * p_src.m_x;
+	term = p_matrix[7];
+	term *= p_src.m_y;
+	LegoFloat z = p_matrix[8];
+	z *= p_src.m_z;
+	z += term;
+	term = p_matrix[6];
+	term *= p_src.m_x;
+	z += term;
 	p_dest->m_z = z;
 }
 
 // FUNCTION: LEGORACERS 0x00449bf0
 void GolMath::MultiplyMatrixByTranspose(const LegoFloat* p_left, const LegoFloat* p_right, LegoFloat* p_dest)
 {
-	LegoFloat value = p_left[1] * p_right[1];
-	value += p_left[2] * p_right[2];
-	value += p_left[0] * p_right[0];
-	p_dest[0] = value;
-
-	value = p_right[4] * p_left[1];
-	value += p_right[5] * p_left[2];
-	value += p_right[3] * p_left[0];
-	p_dest[1] = value;
-
-	value = p_right[8] * p_left[2];
-	value += p_left[1] * p_right[7];
-	value += p_right[6] * p_left[0];
-	p_dest[2] = value;
-
-	value = p_left[4] * p_right[1];
-	value += p_left[5] * p_right[2];
-	value += p_left[3] * p_right[0];
-	p_dest[3] = value;
-
-	value = p_left[5] * p_right[5];
-	value += p_left[3] * p_right[3];
-	value += p_left[4] * p_right[4];
-	p_dest[4] = value;
-
-	value = p_left[3] * p_right[6];
-	value += p_right[8] * p_left[5];
-	value += p_left[4] * p_right[7];
-	p_dest[5] = value;
-
-	value = p_left[8] * p_right[2];
-	value += p_right[1] * p_left[7];
-	value += p_left[6] * p_right[0];
-	p_dest[6] = value;
-
-	value = p_right[3] * p_left[6];
-	value += p_left[8] * p_right[5];
-	value += p_right[4] * p_left[7];
-	p_dest[7] = value;
-
-	value = p_left[7] * p_right[7];
-	value += p_left[8] * p_right[8];
-	value += p_left[6] * p_right[6];
-	p_dest[8] = value;
+	p_dest[0] = GOL_MUL(p_left[1], p_right[1]) + GOL_MUL(p_left[2], p_right[2]) + GOL_MUL(p_left[0], p_right[0]);
+	p_dest[1] = GOL_MUL(p_right[4], p_left[1]) + GOL_MUL(p_right[5], p_left[2]) + GOL_MUL(p_right[3], p_left[0]);
+	p_dest[2] = GOL_MUL(p_right[8], p_left[2]) + GOL_MUL(p_left[1], p_right[7]) + GOL_MUL(p_right[6], p_left[0]);
+	p_dest[3] = GOL_MUL(p_left[4], p_right[1]) + GOL_MUL(p_left[5], p_right[2]) + GOL_MUL(p_left[3], p_right[0]);
+	p_dest[4] = GOL_MUL(p_left[5], p_right[5]) + GOL_MUL(p_left[3], p_right[3]) + GOL_MUL(p_left[4], p_right[4]);
+	p_dest[5] = GOL_MUL(p_left[3], p_right[6]) + GOL_MUL(p_right[8], p_left[5]) + GOL_MUL(p_left[4], p_right[7]);
+	p_dest[6] = GOL_MUL(p_left[8], p_right[2]) + GOL_MUL(p_right[1], p_left[7]) + GOL_MUL(p_left[6], p_right[0]);
+	p_dest[7] = GOL_MUL(p_right[3], p_left[6]) + GOL_MUL(p_left[8], p_right[5]) + GOL_MUL(p_right[4], p_left[7]);
+	p_dest[8] = GOL_MUL(p_left[7], p_right[7]) + GOL_MUL(p_left[8], p_right[8]) + GOL_MUL(p_left[6], p_right[6]);
 }

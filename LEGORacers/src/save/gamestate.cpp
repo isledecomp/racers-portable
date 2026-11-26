@@ -173,14 +173,21 @@ void GameState::InitializeInputBindings(InputManager* p_inputManager)
 // FUNCTION: LEGORACERS 0x0042ea50
 void GameState::SelectFallbackInputBinding(LegoU32 p_playerIndex)
 {
-	LegoU32 otherPlayerIndex = p_playerIndex == 0 ? 1 : 0;
+	LegoU32 otherPlayerIndex;
+	if (p_playerIndex == 0) {
+		otherPlayerIndex = 1;
+	}
+	else {
+		otherPlayerIndex = 0;
+	}
+
 	LegoU32 otherEntryIndex = m_state.m_inputBindings.GetSelectedEntryIndex(otherPlayerIndex);
 	LegoU32 i;
 
 	for (i = 0; i < c_joystickBindingCount; i++) {
 		if (otherEntryIndex != i) {
-			InputBindingState::Entry* entry = &m_state.m_inputBindings.m_entries[i];
-			if (m_inputManager->FindJoystickByDeviceId(entry->m_deviceId) != NULL) {
+			LegoU32 deviceId = m_state.m_inputBindings.m_entries[i].m_deviceId;
+			if (m_inputManager->FindJoystickByDeviceId(deviceId) != NULL) {
 				SelectInputBinding(p_playerIndex, i);
 				return;
 			}
@@ -243,36 +250,25 @@ void GameState::LoadFromSaveGame(SaveGame* p_saveGame, LegoU32 p_activeSaveIndex
 	m_state.m_languageIndex = state.m_languageIndex;
 	m_state.m_lapCount = state.m_lapCount;
 
-	LegoU8* destBindingEntry = &m_state.m_inputBindings.m_entries[0].m_deviceSubType;
-	LegoU8* sourceBindingEntry = &state.m_inputBindings.m_entries[0].m_deviceSubType;
 	for (i = 0; i < c_inputBindingEntryCount; i++) {
-		if (destBindingEntry[-1] == sourceBindingEntry[-1] && destBindingEntry[0] == sourceBindingEntry[0] &&
-			destBindingEntry[1] == sourceBindingEntry[1]) {
-			::memcpy(
-				destBindingEntry + 3,
-				sourceBindingEntry + 3,
-				sizeof(m_state.m_inputBindings.m_entries[0].m_events)
-			);
+		if (m_state.m_inputBindings.m_entries[i].m_deviceType == state.m_inputBindings.m_entries[i].m_deviceType &&
+			m_state.m_inputBindings.m_entries[i].m_deviceSubType ==
+				state.m_inputBindings.m_entries[i].m_deviceSubType &&
+			m_state.m_inputBindings.m_entries[i].m_deviceId == state.m_inputBindings.m_entries[i].m_deviceId) {
+			for (LegoU32 eventIndex = 0; eventIndex < c_inputBindingEventCount; eventIndex++) {
+				m_state.m_inputBindings.m_entries[i].m_events[eventIndex] =
+					state.m_inputBindings.m_entries[i].m_events[eventIndex];
+			}
 		}
-
-		sourceBindingEntry += sizeof(InputBindingState::Entry);
-		destBindingEntry += sizeof(InputBindingState::Entry);
 	}
 
-	InputBindingState::PlayerState* sourcePlayer = state.m_inputBindings.m_players;
-	InputBindingState::PlayerState* destPlayer = m_state.m_inputBindings.m_players;
 	for (i = 0; i < c_joystickBindingCount; i++) {
-		*destPlayer = *sourcePlayer;
-
-		InputBindingState::Entry* entry = &m_state.m_inputBindings.m_entries[destPlayer->m_selectedEntryIndex];
-
-		if (entry->m_deviceType == c_joystickDeviceType &&
-			m_inputManager->FindJoystickByDeviceId(entry->m_deviceId) == NULL) {
+		m_state.m_inputBindings.m_players[i] = state.m_inputBindings.m_players[i];
+		LegoU32 entryIndex = m_state.m_inputBindings.GetSelectedEntryIndex(i);
+		if (m_state.m_inputBindings.m_entries[entryIndex].m_deviceType == c_joystickDeviceType &&
+			m_inputManager->FindJoystickByDeviceId(m_state.m_inputBindings.m_entries[entryIndex].m_deviceId) == NULL) {
 			SelectFallbackInputBinding(i);
 		}
-
-		sourcePlayer++;
-		destPlayer++;
 	}
 
 	m_state.m_partUnlockFlags = state.m_partUnlockFlags;

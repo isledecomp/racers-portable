@@ -36,8 +36,6 @@
 #include <emscripten.h>
 #endif
 
-DECOMP_SIZE_ASSERT(CommandLineArgs, 0x84)
-
 // GLOBAL: LEGORACERS 0x004c47e4
 HINSTANCE g_hInstance;
 
@@ -51,34 +49,36 @@ LegoRacers g_racers;
 LegoChar g_commandLine[256];
 
 // GLOBAL: LEGORACERS 0x004c6fe8
-CommandLineArgs g_commandLineArgs;
+LegoS32 g_argc;
+
+// GLOBAL: LEGORACERS 0x004c6fec
+LegoChar* g_argv[32];
 
 // FUNCTION: LEGORACERS 0x00449ce0
 void SplitCommand()
 {
 	LegoS32 offset = 0;
-	g_commandLineArgs.m_argc = 0;
+	g_argc = 0;
 
 	if (!g_commandLine[0]) {
 		return;
 	}
 
 	LegoS32 i;
-	for (; g_commandLineArgs.m_argc < (LegoS32) sizeOfArray(g_commandLineArgs.m_argv);
-		 offset += i, g_commandLineArgs.m_argc++) {
+	for (; g_argc < (LegoS32) sizeOfArray(g_argv); offset += i, g_argc++) {
 		LegoChar* arg = &g_commandLine[offset];
 
 		for (i = 0; arg[i] && arg[i] != ' '; i++) {
 		}
 
-		g_commandLineArgs.m_argv[g_commandLineArgs.m_argc] = arg;
+		g_argv[g_argc] = arg;
 
 		if (!g_commandLine[offset + i]) {
-			g_commandLineArgs.m_argc++;
+			g_argc++;
 			break;
 		}
 
-		arg[i++] = '\0';
+		g_argv[g_argc][i++] = '\0';
 	}
 }
 
@@ -92,7 +92,7 @@ static int SDLCALL GameThread(void*)
 	// POINTER, not its return value.
 	srand((unsigned int) (uintptr_t) timeGetTime);
 
-	int result = GameMain(g_commandLineArgs.m_argc, g_commandLineArgs.m_argv);
+	int result = GameMain(g_argc, g_argv);
 
 	SDL_Log("Game loop finished (result %d)", result);
 	SDL_SetAtomicInt(&g_gameResult, result);

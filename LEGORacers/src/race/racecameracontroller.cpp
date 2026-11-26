@@ -38,9 +38,6 @@ const RaceCameraController::Profile g_cameraProfiles[8] = {
 // GLOBAL: LEGORACERS 0x004b03e8
 extern const LegoFloat g_lagTimeScale = 250.0f;
 
-// GLOBAL: LEGORACERS 0x004b03ec
-extern const LegoFloat g_degreesToRadians = 0.017453292f;
-
 // GLOBAL: LEGORACERS 0x004b03f8
 extern const LegoFloat g_transitionTurnRate = 0.0015707964f;
 
@@ -86,15 +83,15 @@ void RaceCameraController::SetRotationLag(LegoFloat p_amount)
 // FUNCTION: LEGORACERS 0x00427bb0
 void RaceCameraController::SetPitchAngle(LegoFloat p_degrees)
 {
-	LegoFloat radians = p_degrees;
-	radians *= g_degreesToRadians;
+	LegoFloat radians = p_degrees * 0.017453292f;
 	GolMath::SinCos(radians, &m_pitchSine, &m_pitchCosine);
 }
 
 // FUNCTION: LEGORACERS 0x00427be0
 void RaceCameraController::SetHeightAngle(LegoFloat p_degrees)
 {
-	m_heightSine = static_cast<LegoFloat>(sin(g_degreesToRadians * p_degrees));
+	LegoFloat radians = p_degrees * 0.017453292f;
+	m_heightSine = static_cast<LegoFloat>(sin(radians));
 }
 
 // FUNCTION: LEGORACERS 0x00427c00
@@ -105,8 +102,8 @@ void RaceCameraController::UpdateListener()
 	}
 
 	GolVec3 velocity = m_racer->m_physics.m_velocity;
-	GolVec3 right;
 	GolVec3 forward;
+	GolVec3 right;
 	m_racer->m_visuals.m_carEntity->GetAxes(&right, &forward);
 
 	GolVec3 position;
@@ -122,28 +119,25 @@ void RaceCameraController::UpdateListener()
 
 	{
 		SoundNode* soundNode = m_listenerNode;
-		SoundVector* rightVector = &soundNode->m_right;
-		SoundVector* forwardVector = &soundNode->m_forward;
-		rightVector->m_x = right.m_x;
-		rightVector->m_y = right.m_y;
-		rightVector->m_z = right.m_z;
-		forwardVector->m_x = forward.m_x;
-		forwardVector->m_y = forward.m_y;
-		forwardVector->m_z = forward.m_z;
+		GolVec3* rightVector = &soundNode->m_right;
+		GolVec3* forwardVector = &soundNode->m_forward;
+		*rightVector = right;
+		*forwardVector = forward;
 
-		SoundVector* orientation = &soundNode->m_orientation;
-		orientation->m_x = forwardVector->m_y * rightVector->m_z - forwardVector->m_z * rightVector->m_y;
-		orientation->m_y = forwardVector->m_z * rightVector->m_x - forwardVector->m_x * rightVector->m_z;
-		orientation->m_z = rightVector->m_y * forwardVector->m_x - forwardVector->m_y * rightVector->m_x;
+		GolVec3* orientation = &soundNode->m_orientation;
+		orientation->m_x =
+			GOL_MUL(forwardVector->m_y, rightVector->m_z) - GOL_MUL(forwardVector->m_z, rightVector->m_y);
+		orientation->m_y =
+			GOL_MUL(forwardVector->m_z, rightVector->m_x) - GOL_MUL(rightVector->m_z, forwardVector->m_x);
+		orientation->m_z =
+			GOL_MUL(rightVector->m_y, forwardVector->m_x) - GOL_MUL(forwardVector->m_y, rightVector->m_x);
 		GolMath::NormalizeVector3(*orientation, orientation);
 		soundNode->m_unk0x44 = TRUE;
 	}
 
 	{
 		SoundNode* soundNode = m_listenerNode;
-		soundNode->m_position.m_x = position.m_x;
-		soundNode->m_position.m_y = position.m_y;
-		soundNode->m_position.m_z = position.m_z;
+		static_cast<GolVec3&>(soundNode->m_position) = position;
 		soundNode->m_unk0x44 = TRUE;
 	}
 }
@@ -208,14 +202,6 @@ void RaceCameraController::UpdateFollow()
 
 extern LegoU16 g_randomTable[1024];
 extern LegoU32 g_randomTableIndex;
-extern const LegoFloat g_halfPi;
-extern const LegoFloat g_hazardPi;
-extern const LegoFloat g_statMax;
-extern const LegoFloat g_hazardPi;
-extern const LegoFloat g_twoPi;
-extern const LegoFloat g_brickSettleRate;
-extern const LegoFloat g_unk0x004afde0;
-extern const LegoFloat g_warpPortalHeightOffset;
 
 // FUNCTION: LEGORACERS 0x00427e80
 void RaceCameraController::UpdateShake()
@@ -269,7 +255,7 @@ void RaceCameraController::UpdateShake()
 		LegoFloat phase = static_cast<LegoFloat>(remaining);
 		phase *= g_unk0x004b031c;
 		phase *= g_unk0x004b0320;
-		phase *= g_hazardPi;
+		phase *= 3.1415927f;
 		LegoFloat angle = static_cast<LegoFloat>(cos(phase));
 		LegoFloat fov = angle * m_shakeAmount + (m_baseFov - m_shakeAmount);
 		camera->m_flags |= GolCamera::c_flagProjectionDirty;
@@ -353,9 +339,8 @@ void RaceCameraController::SetRacer(Racer* p_racer)
 	if (m_racer != p_racer) {
 		m_racer = p_racer;
 		m_racer->m_visuals.m_carEntity->GetPosition(&m_lastRacerPosition);
-		LegoU32 flags = m_racer->m_driveController.m_flags;
+		m_turboActive = m_racer->m_driveController.m_flags & 1;
 		m_followDistanceScale = 1.0f;
-		m_turboActive = flags & 1;
 		GolAnimatedEntity* entity = m_racer->m_visuals.m_carEntity;
 		m_viewDirection.m_x = entity->GetOrientation().m_rows[0].m_x;
 		m_viewDirection.m_y = entity->GetOrientation().m_rows[0].m_y;
@@ -482,6 +467,15 @@ void RaceCameraController::GetViewDirection(GolVec3* p_dest)
 	}
 }
 
+inline static void LerpVector3(const GolVec3& p_from, const GolVec3& p_to, LegoFloat p_amount, GolVec3* p_dest)
+{
+	GolVec3 delta = p_to - p_from;
+	GolVec3 scaled = delta * p_amount;
+	p_dest->m_x = scaled.m_x + p_from.m_x;
+	p_dest->m_y = scaled.m_y + p_from.m_y;
+	p_dest->m_z = scaled.m_z + p_from.m_z;
+}
+
 // FUNCTION: LEGORACERS 0x00428540
 void RaceCameraController::Update(LegoFloat p_elapsedMs)
 {
@@ -495,7 +489,7 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 		return;
 	}
 
-	if (p_elapsedMs <= 0.0f) {
+	if (!(p_elapsedMs > 0.0f)) {
 		if (!(m_dirty & 1)) {
 			return;
 		}
@@ -504,11 +498,11 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 
 	m_frameDirty = m_dirty;
 	m_dirty &= 0xf0;
-	if (p_elapsedMs <= g_statMax) {
-		m_elapsed = p_elapsedMs;
+	if (p_elapsedMs > 100.0f) {
+		m_elapsed = 100.0f;
 	}
 	else {
-		m_elapsed = g_statMax;
+		m_elapsed = p_elapsedMs;
 	}
 
 	m_elapsedMs = static_cast<LegoS32>(m_elapsed);
@@ -521,7 +515,8 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 
 	switch (m_mode) {
 	case 0: {
-		m_racer->m_visuals.m_carEntity->GetPosition(&m_lastRacerPosition);
+		CarVisuals* racerVisuals = &m_racer->m_visuals;
+		racerVisuals->m_carEntity->GetPosition(&m_lastRacerPosition);
 
 		if (m_transitionMs == 0.0f) {
 			GolMath::Matrix3ToQuat(m_previousTransform.m_orientation, &m_previousRotation);
@@ -530,23 +525,15 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 
 		m_transitionMs += m_elapsed;
 		LegoFloat amount;
-		if (m_transitionMs <= 2000.0f) {
-			amount = m_transitionMs * g_transitionProgressScale;
-		}
-		else {
+		if (m_transitionMs > 2000.0f) {
 			m_transitionMs = 2000.0f;
 			amount = 1.0f;
 		}
+		else {
+			amount = m_transitionMs * g_transitionProgressScale;
+		}
 
-		m_smoothedTransform.m_position.m_x =
-			(m_rawTransform.m_position.m_x - m_previousTransform.m_position.m_x) * amount +
-			m_previousTransform.m_position.m_x;
-		m_smoothedTransform.m_position.m_y =
-			(m_rawTransform.m_position.m_y - m_previousTransform.m_position.m_y) * amount +
-			m_previousTransform.m_position.m_y;
-		m_smoothedTransform.m_position.m_z =
-			(m_rawTransform.m_position.m_z - m_previousTransform.m_position.m_z) * amount +
-			m_previousTransform.m_position.m_z;
+		LerpVector3(m_previousTransform.m_position, m_rawTransform.m_position, amount, &m_smoothedTransform.m_position);
 		GolMath::LerpQuat(m_previousRotation, m_rawRotation, amount, &m_smoothedRotation);
 		GolMath::QuatToMatrix3(&m_smoothedRotation, &m_smoothedTransform.m_m[0][0]);
 		UpdateFollow();
@@ -556,11 +543,15 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 	case 1:
 	case 3: {
 		Racer* racer = m_racer;
-		GolAnimatedEntity* entity = racer->m_visuals.m_carEntity;
+		LegoFloat first;
+		LegoFloat second;
 		GolVec3 targetPosition;
-		entity->GetPosition(&targetPosition);
+		racer->m_visuals.m_carEntity->GetPosition(&targetPosition);
 
-		GolVec3 desiredDirection = entity->GetOrientation().m_rows[0];
+		GolVec3 desiredDirection;
+		GolAnimatedEntity* entity = m_racer->m_visuals.m_carEntity;
+		desiredDirection.m_x = entity->GetOrientation().m_rows[0].m_x;
+		desiredDirection.m_y = entity->GetOrientation().m_rows[0].m_y;
 		if (desiredDirection.m_x == 0.0f && desiredDirection.m_y == 0.0f) {
 			if (m_viewDirection.m_x == 0.0f && m_viewDirection.m_y == 0.0f) {
 				m_viewDirection.m_x = 1.0f;
@@ -570,22 +561,17 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 			desiredDirection = m_viewDirection;
 		}
 		desiredDirection.m_z = 0.0f;
-
-		GolVec2 desiredDirection2D;
-		desiredDirection2D.m_x = desiredDirection.m_x;
-		desiredDirection2D.m_y = desiredDirection.m_y;
-		GolMath::NormalizeVector2(desiredDirection2D, &desiredDirection2D);
-		desiredDirection.m_x = desiredDirection2D.m_x;
-		desiredDirection.m_y = desiredDirection2D.m_y;
+		GolMath::NormalizeVector2(
+			*reinterpret_cast<GolVec2*>(&desiredDirection),
+			reinterpret_cast<GolVec2*>(&desiredDirection)
+		);
 
 		if (m_viewDirection.m_z != 0.0f) {
 			m_viewDirection.m_z = 0.0f;
-			GolVec2 direction2D;
-			direction2D.m_x = m_viewDirection.m_x;
-			direction2D.m_y = m_viewDirection.m_y;
-			GolMath::NormalizeVector2(direction2D, &direction2D);
-			m_viewDirection.m_x = direction2D.m_x;
-			m_viewDirection.m_y = direction2D.m_y;
+			GolMath::NormalizeVector2(
+				*reinterpret_cast<GolVec2*>(&m_viewDirection),
+				reinterpret_cast<GolVec2*>(&m_viewDirection)
+			);
 		}
 
 		if (m_frameDirty & 1) {
@@ -598,61 +584,53 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 			}
 			else {
 				LegoFloat turnAmount;
-				if (racer->m_physics.m_turnRadius == 0.0f) {
-					turnAmount = 0.0f;
-				}
-				else {
-					turnAmount = racer->m_physics.m_forwardSpeed * g_turnLookAheadScale / racer->m_physics.m_turnRadius;
+				second = racer->m_physics.GetTurnRadius();
+				if (0.0f != second) {
+					turnAmount = (first = m_racer->m_physics.GetForwardSpeed()) * g_turnLookAheadScale / second;
 					if (turnAmount < g_unk0x004b0418) {
 						turnAmount = g_unk0x004b0418;
 					}
-					else if (turnAmount > -g_unk0x004b0418) {
-						turnAmount = -g_unk0x004b0418;
+					else if (turnAmount > 0.30000001f) {
+						turnAmount = 0.30000001f;
 					}
 				}
+				else {
+					turnAmount = 0.0f;
+				}
 
-				m_turnLeadAngle =
+				LegoFloat leadAngle =
 					turnAmount + 1.0f / (m_turnLeadRate * m_elapsed + 1.0f) * (m_turnLeadAngle - turnAmount);
+				m_turnLeadAngle = leadAngle;
+				GolMath::SinCos(leadAngle, &second, &first);
 
-				LegoFloat turnSin;
-				LegoFloat turnCos;
-				GolMath::SinCos(m_turnLeadAngle, &turnSin, &turnCos);
+				desiredDirection.m_x = GOL_MUL(first, desiredDirection.m_x) - GOL_MUL(second, desiredDirection.m_y);
+				desiredDirection.m_y = first * desiredDirection.m_y + second * desiredDirection.m_x;
 
-				LegoFloat oldX = desiredDirection.m_x;
-				desiredDirection.m_x = turnCos * desiredDirection.m_x - turnSin * desiredDirection.m_y;
-				desiredDirection.m_y = turnCos * desiredDirection.m_y + turnSin * oldX;
-
-				LegoFloat currentAngle = VectorToAngle(m_viewDirection.m_x, m_viewDirection.m_y);
-				LegoFloat desiredAngle = VectorToAngle(desiredDirection.m_x, desiredDirection.m_y);
-				LegoFloat delta = currentAngle - desiredAngle;
-				if (delta < g_unk0x004b0410 || delta > g_viewAngleDeadband) {
+				first = VectorToAngle(m_viewDirection.m_x, m_viewDirection.m_y);
+				second = VectorToAngle(desiredDirection.m_x, desiredDirection.m_y);
+				LegoFloat delta = first - second;
+				if (delta < g_unk0x004b0410 || g_viewAngleDeadband < delta) {
 					while (delta < g_unk0x004b0408) {
-						delta += g_twoPi;
+						delta += 6.2831855f;
 					}
-					while (delta > -g_unk0x004b0408) {
-						delta -= g_twoPi;
+					while (delta > 3.1415927f) {
+						delta -= 6.2831855f;
 					}
 
-					LegoFloat angleAmount = 1.0f / (m_viewAngleRate * m_elapsed + 1.0f);
-					LegoFloat angle = delta * angleAmount + desiredAngle;
-					GolMath::SinCos(angle, &desiredDirection.m_y, &desiredDirection.m_x);
+					first = 1.0f / (m_viewAngleRate * m_elapsed + 1.0f);
+					GolMath::SinCos(delta * first + second, &desiredDirection.m_y, &desiredDirection.m_x);
 				}
 			}
 
 			LegoFloat positionAmount = 1.0f / (m_targetPositionRate * m_elapsed + 1.0f);
-			targetPosition.m_x = (m_lastRacerPosition.m_x - targetPosition.m_x) * positionAmount + targetPosition.m_x;
-			targetPosition.m_y = (m_lastRacerPosition.m_y - targetPosition.m_y) * positionAmount + targetPosition.m_y;
-			targetPosition.m_z = (m_lastRacerPosition.m_z - targetPosition.m_z) * positionAmount + targetPosition.m_z;
+			LerpVector3(targetPosition, m_lastRacerPosition, positionAmount, &targetPosition);
 		}
 		m_lastRacerPosition = targetPosition;
 
-		if (m_turboActive) {
-			m_turboActive = racer->m_driveController.m_flags & DriveController::c_flagTurbo;
-		}
-		else {
+		if (!m_turboActive) {
 			m_turboActive = racer->m_driveController.m_flags & DriveController::c_flagTurbo;
 			if (m_turboActive) {
-				switch (racer->m_turboLevel) {
+				switch (m_racer->m_turboLevel) {
 				case 0:
 					m_followDistanceScale = -0.2f;
 					break;
@@ -670,34 +648,39 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 				}
 			}
 		}
+		else {
+			m_turboActive = racer->m_driveController.m_flags & DriveController::c_flagTurbo;
+		}
 
 		LegoFloat cameraDistance;
-		if (m_followDistanceScale >= 1.0f) {
-			cameraDistance = m_followDistance;
-		}
-		else {
-			LegoFloat transitionStep;
-			if (m_alternate) {
-				transitionStep = m_elapsed * 0.0040000002f;
+		if (m_followDistanceScale < 1.0f) {
+			if (m_followDistanceScale < 0.0f) {
+				m_followDistanceScale += m_elapsed * 0.0040000002f;
 			}
 			else {
-				transitionStep = m_elapsed * g_brickSettleRate;
+				m_followDistanceScale += m_elapsed * 0.002f;
 			}
-			m_followDistanceScale += transitionStep;
 
-			if (m_followDistanceScale <= 1.0f) {
-				cameraDistance = m_followDistanceScale * m_followDistance;
-				if (m_followDistanceScale < 0.0f) {
-					cameraDistance = -cameraDistance;
-				}
-				if (cameraDistance < g_cameraMinDistance) {
-					cameraDistance = g_cameraMinDistance;
-				}
-			}
-			else {
+			if (m_followDistanceScale > 1.0f) {
 				m_followDistanceScale = 1.0f;
 				cameraDistance = m_followDistance;
 			}
+			else {
+				LegoFloat distance;
+				if (m_followDistanceScale < 0.0f) {
+					distance = -(m_followDistanceScale * m_followDistance);
+				}
+				else {
+					distance = m_followDistanceScale * m_followDistance;
+				}
+				cameraDistance = distance;
+				if (distance < g_cameraMinDistance) {
+					cameraDistance = 12.0f;
+				}
+			}
+		}
+		else {
+			cameraDistance = m_followDistance;
 		}
 
 		if (desiredDirection.m_x != 0.0f || desiredDirection.m_y != 0.0f) {
@@ -709,74 +692,92 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 		up.m_y = 0.0f;
 		up.m_z = -1.0f;
 		m_viewDirection.m_z = 0.0f;
-
-		GolVec2 direction2D;
-		direction2D.m_x = m_viewDirection.m_x;
-		direction2D.m_y = m_viewDirection.m_y;
-		GolMath::NormalizeVector2(direction2D, &direction2D);
-		m_viewDirection.m_x = direction2D.m_x;
-		m_viewDirection.m_y = direction2D.m_y;
+		GolMath::NormalizeVector2(
+			*reinterpret_cast<GolVec2*>(&m_viewDirection),
+			reinterpret_cast<GolVec2*>(&m_viewDirection)
+		);
 
 		LegoFloat verticalOffset = m_heightSine;
 		LegoFloat height;
-		GolVec3 cameraOffset;
 		if (m_mode == c_modeFinish) {
 			m_transitionMs += m_elapsed;
-			if (m_transitionMs <= 2000.0f) {
+			if (m_transitionMs < 2000.0f) {
 				LegoFloat profileAmount = 1.0f - m_transitionMs * g_transitionProgressScale;
-				cameraDistance = m_blendFollowDistance * profileAmount + m_followDistance;
-				height = m_blendPitchSine * profileAmount + m_pitchSine;
-				verticalOffset = m_blendHeightSine * profileAmount + m_heightSine;
-				LegoFloat sideDistance = m_blendPitchCosine * profileAmount + m_pitchCosine;
+				cameraDistance = m_blendFollowDistance;
+				cameraDistance *= profileAmount;
+				cameraDistance += m_followDistance;
+				height = m_blendPitchSine;
+				height *= profileAmount;
+				height += m_pitchSine;
+				verticalOffset = m_blendHeightSine;
+				verticalOffset *= profileAmount;
+				verticalOffset += m_heightSine;
+				LegoFloat sideDistance = m_blendPitchCosine;
+				sideDistance *= profileAmount;
+				sideDistance += m_pitchCosine;
 
 				LegoFloat turnSin;
 				LegoFloat turnCos;
 				GolMath::SinCos(m_transitionMs * g_transitionTurnRate, &turnSin, &turnCos);
-				cameraOffset.m_x = (m_viewDirection.m_x * turnCos - m_viewDirection.m_y * turnSin) * sideDistance;
-				cameraOffset.m_y = (m_viewDirection.m_x * turnSin + m_viewDirection.m_y * turnCos) * sideDistance;
+				desiredDirection.m_x =
+					(GOL_MUL(m_viewDirection.m_x, turnCos) - GOL_MUL(m_viewDirection.m_y, turnSin)) * sideDistance;
+				desiredDirection.m_y =
+					(GOL_MUL(m_viewDirection.m_x, turnSin) + GOL_MUL(m_viewDirection.m_y, turnCos)) * sideDistance;
 			}
 			else {
 				m_transitionMs = 2000.0f;
 				cameraDistance = m_followDistance;
-				cameraOffset.m_x = -(m_pitchCosine * m_viewDirection.m_x);
-				cameraOffset.m_y = -(m_viewDirection.m_y * m_pitchCosine);
+				desiredDirection.m_x = -(m_pitchCosine * m_viewDirection.m_x);
+				desiredDirection.m_y = -(m_viewDirection.m_y * m_pitchCosine);
 				height = m_pitchSine;
 			}
 		}
 		else {
-			cameraOffset.m_x = m_pitchCosine * m_viewDirection.m_x;
-			cameraOffset.m_y = m_viewDirection.m_y * m_pitchCosine;
+			desiredDirection.m_x = m_pitchCosine * m_viewDirection.m_x;
+			desiredDirection.m_y = m_viewDirection.m_y * m_pitchCosine;
 			height = m_pitchSine;
 		}
 
-		cameraOffset.m_z = -height;
+		desiredDirection.m_z = -height;
 		if (m_frameDirty & 1) {
-			m_rawTransform.m_position.m_x = m_lastRacerPosition.m_x - cameraOffset.m_x * cameraDistance;
-			m_rawTransform.m_position.m_y = m_lastRacerPosition.m_y - cameraOffset.m_y * cameraDistance;
-			m_rawTransform.m_position.m_z =
-				m_lastRacerPosition.m_z - (cameraOffset.m_z - verticalOffset) * cameraDistance;
+			GolVec3 offset;
+			offset.m_x = desiredDirection.m_x;
+			offset.m_y = desiredDirection.m_y;
+			offset.m_z = desiredDirection.m_z - verticalOffset;
+			GolVec3 scaledOffset = offset * cameraDistance;
+			m_rawTransform.m_position.m_x = targetPosition.m_x - scaledOffset.m_x;
+			m_rawTransform.m_position.m_y = targetPosition.m_y - scaledOffset.m_y;
+			m_rawTransform.m_position.m_z = targetPosition.m_z - scaledOffset.m_z;
 		}
 		else {
-			m_rawTransform.m_position.m_x =
-				m_lastRacerPosition.m_x - m_previousTransform.m_orientation.m_rows[2].m_x * cameraDistance;
-			m_rawTransform.m_position.m_y =
-				m_lastRacerPosition.m_y - m_previousTransform.m_orientation.m_rows[2].m_y * cameraDistance;
+			LegoFloat offsetX = m_previousTransform.m_orientation.m_rows[2].m_x;
+			offsetX *= cameraDistance;
+			m_rawTransform.m_position.m_x = targetPosition.m_x - offsetX;
+			LegoFloat offsetY = m_previousTransform.m_orientation.m_rows[2].m_y;
+			offsetY *= cameraDistance;
+			m_rawTransform.m_position.m_y = targetPosition.m_y - offsetY;
 			m_rawTransform.m_position.m_z =
-				m_lastRacerPosition.m_z -
+				targetPosition.m_z -
 				(m_previousTransform.m_orientation.m_rows[2].m_z - verticalOffset) * cameraDistance;
 		}
 
-		BuildOrientation(&cameraOffset, &up, &m_rawTransform.m_orientation);
+		BuildOrientation(&desiredDirection, &up, &m_rawTransform.m_orientation);
 		ApplySmoothing();
 		return;
 	}
 	case 2: {
-		Racer* racer = m_racer;
-		GolAnimatedEntity* entity = racer->m_visuals.m_carEntity;
-		entity->GetPosition(&m_lastRacerPosition);
+		CarVisuals* racerVisuals = &m_racer->m_visuals;
+		racerVisuals->m_carEntity->GetPosition(&m_lastRacerPosition);
+		GolAnimatedEntity* entity = m_racer->m_visuals.m_carEntity;
 
-		GolVec3 right = entity->GetOrientation().m_rows[0];
-		GolVec3 up = entity->GetOrientation().m_rows[2];
+		GolVec3 right;
+		right.m_x = entity->GetOrientation().m_rows[0].m_x;
+		right.m_y = entity->GetOrientation().m_rows[0].m_y;
+		right.m_z = entity->GetOrientation().m_rows[0].m_z;
+		GolVec3 up;
+		up.m_x = entity->GetOrientation().m_rows[2].m_x;
+		up.m_y = entity->GetOrientation().m_rows[2].m_y;
+		up.m_z = entity->GetOrientation().m_rows[2].m_z;
 		up.m_x = -up.m_x;
 		up.m_y = -up.m_y;
 		up.m_z = -up.m_z;
@@ -784,12 +785,12 @@ void RaceCameraController::Update(LegoFloat p_elapsedMs)
 
 		entity->GetPosition(&m_rawTransform.m_position);
 		if (m_alternate) {
-			m_rawTransform.m_position.m_z += g_warpPortalHeightOffset;
+			m_rawTransform.m_position.m_z += 6.0f;
 			ApplySmoothing();
 			return;
 		}
 
-		m_rawTransform.m_position.m_z += g_unk0x004afde0;
+		m_rawTransform.m_position.m_z += 10.0f;
 		ApplySmoothing();
 		return;
 	}
@@ -821,9 +822,9 @@ LegoFloat RaceCameraController::VectorToAngle(LegoFloat p_x, LegoFloat p_y)
 		if (p_x > 0.0f) {
 			LegoFloat angle = static_cast<LegoFloat>(acos(p_y));
 			angle = -angle;
-			return angle + g_halfPi;
+			return angle + 1.5707964f;
 		}
-		return static_cast<LegoFloat>(acos(p_y)) + g_halfPi;
+		return static_cast<LegoFloat>(acos(p_y)) + 1.5707964f;
 	}
 
 	if (p_y > 0.0f) {

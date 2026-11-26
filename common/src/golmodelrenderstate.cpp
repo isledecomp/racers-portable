@@ -85,16 +85,15 @@ void GolModelRenderState::AddLight(const GolRenderDevice::Light* p_light)
 // FUNCTION: LEGORACERS 0x0040ec00
 void GolModelRenderState::UpdateMaterialCaches()
 {
-	GolMaterial* activeMaterial = m_activeMaterial;
-	LegoU32 zero = 0;
+	GolMaterial* material = m_activeMaterial;
 
-	if (activeMaterial == NULL) {
-		m_activeMaterialColor.m_red = zero;
-		m_activeMaterialColor.m_grn = zero;
-		m_activeMaterialColor.m_blu = zero;
+	if (material == NULL) {
+		m_activeMaterialColor.m_red = 0;
+		m_activeMaterialColor.m_grn = 0;
+		m_activeMaterialColor.m_blu = 0;
 		m_activeMaterialColor.m_alp = 0xff;
 
-		for (LegoU32 i = zero; i < m_lightCount; i++) {
+		for (LegoU32 i = 0; i < m_lightCount; i++) {
 			m_lightColorProducts[i].m_red = 0.0f;
 			m_lightColorProducts[i].m_grn = 0.0f;
 			m_lightColorProducts[i].m_blu = 0.0f;
@@ -103,34 +102,20 @@ void GolModelRenderState::UpdateMaterialCaches()
 		return;
 	}
 
-	GolMaterialColor ambient = activeMaterial->GetAmbient();
+	GolMaterialColor ambient = material->GetAmbient();
 	m_activeMaterialColor.m_red = (static_cast<LegoU32>(ambient.m_red & 0xff) * m_materialColorValue.m_red) >> 8;
 	m_activeMaterialColor.m_grn = (static_cast<LegoU32>(ambient.m_grn & 0xff) * m_materialColorValue.m_grn) >> 8;
 	m_activeMaterialColor.m_blu = (static_cast<LegoU32>(ambient.m_blu & 0xff) * m_materialColorValue.m_blu) >> 8;
 	m_activeMaterialColor.m_alp = ambient.m_alp;
 
-	GolMaterialColor diffuse = activeMaterial->GetDiffuse();
-	if (m_lightCount > zero) {
-		LegoU32 i = 0;
-		LegoU32 red = diffuse.m_red & 0xff;
-		LegoU32 grn = diffuse.m_grn & 0xff;
-		LegoU32 blu = diffuse.m_blu & 0xff;
-		FColorRGB* lightProduct = m_lightColorProducts;
-		ColorRGBA* lightColor = m_lightColors;
-
-		while (i < m_lightCount) {
-			LegoS32 product = static_cast<LegoS32>((red * lightColor->m_red) >> 8);
-			lightProduct->m_red = static_cast<LegoFloat>(product);
-
-			product = static_cast<LegoS32>((grn * lightColor->m_grn) >> 8);
-			lightProduct->m_grn = static_cast<LegoFloat>(product);
-
-			product = static_cast<LegoS32>((blu * lightColor->m_blu) >> 8);
-			lightProduct->m_blu = static_cast<LegoFloat>(product);
-			lightProduct++;
-			lightColor++;
-			i++;
-		}
+	GolMaterialColor diffuse = material->GetDiffuse();
+	for (LegoU32 i = 0; i < m_lightCount; i++) {
+		LegoS32 red = (static_cast<LegoU32>(diffuse.m_red & 0xff) * m_lightColors[i].m_red) >> 8;
+		m_lightColorProducts[i].m_red = static_cast<LegoFloat>(red);
+		LegoS32 grn = (static_cast<LegoU32>(diffuse.m_grn & 0xff) * m_lightColors[i].m_grn) >> 8;
+		m_lightColorProducts[i].m_grn = static_cast<LegoFloat>(grn);
+		LegoS32 blu = (static_cast<LegoU32>(diffuse.m_blu & 0xff) * m_lightColors[i].m_blu) >> 8;
+		m_lightColorProducts[i].m_blu = static_cast<LegoFloat>(blu);
 	}
 }
 
@@ -277,14 +262,9 @@ void GolModelRenderState::LightVertices2(
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_nx;
-			dot *= m_lightDirections[0].m_x;
-			LegoFloat normalProduct = vertex->m_ny;
-			normalProduct *= m_lightDirections[0].m_y;
-			dot += normalProduct;
-			normalProduct = vertex->m_nz;
-			normalProduct *= m_lightDirections[0].m_z;
-			dot += normalProduct;
+			LegoFloat dot = GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x);
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z);
 
 			LegoFloat redProduct = m_lightColorProducts[0].m_red;
 			redProduct *= dot;
@@ -299,9 +279,14 @@ void GolModelRenderState::LightVertices2(
 			LegoS32 blu = bluBase;
 			blu -= static_cast<LegoS32>(bluProduct);
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y;
-			dot += vertex->m_nz * m_lightDirections[1].m_z;
-			dot += vertex->m_nx * m_lightDirections[1].m_x;
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			LegoFloat normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
 
 			redProduct = m_lightColorProducts[1].m_red;
 			redProduct *= dot;
@@ -371,14 +356,9 @@ void GolModelRenderState::LightVertices3(
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_nx;
-			dot *= m_lightDirections[0].m_x;
-			LegoFloat normalProduct = vertex->m_ny;
-			normalProduct *= m_lightDirections[0].m_y;
-			dot += normalProduct;
-			normalProduct = vertex->m_nz;
-			normalProduct *= m_lightDirections[0].m_z;
-			dot += normalProduct;
+			LegoFloat dot = (GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x));
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += (GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z));
 
 			LegoFloat redProduct = m_lightColorProducts[0].m_red;
 			redProduct *= dot;
@@ -392,9 +372,14 @@ void GolModelRenderState::LightVertices3(
 			bluProduct *= dot;
 			LegoS32 blu = bluBase - static_cast<LegoS32>(bluProduct);
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y;
-			dot += vertex->m_nz * m_lightDirections[1].m_z;
-			dot += vertex->m_nx * m_lightDirections[1].m_x;
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			LegoFloat normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
 
 			redProduct = m_lightColorProducts[1].m_red;
 			redProduct *= dot;
@@ -408,8 +393,14 @@ void GolModelRenderState::LightVertices3(
 			bluProduct *= dot;
 			blu -= static_cast<LegoS32>(bluProduct);
 
-			dot = (m_lightDirections[2].m_z * vertex->m_nz + vertex->m_ny * m_lightDirections[2].m_y) +
-				  m_lightDirections[2].m_x * vertex->m_nx;
+			dot = m_lightDirections[2].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[2].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
 
 			redProduct = m_lightColorProducts[2].m_red;
 			redProduct *= dot;
@@ -469,39 +460,96 @@ void GolModelRenderState::LightVertices4(
 )
 {
 	ColorRGBA color;
-	color.m_alp = m_activeMaterialColor.m_alp;
-
 	LegoS32 redBase = m_activeMaterialColor.m_red;
 	LegoS32 grnBase = m_activeMaterialColor.m_grn;
 	LegoS32 bluBase = m_activeMaterialColor.m_blu;
+	color.m_alp = m_activeMaterialColor.m_alp;
+
 	const CommandVertex* vertex = p_vertices + p_outputFirst;
 	const CommandVertex* end = vertex + p_vertexCount;
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_ny * m_lightDirections[0].m_y +
-							(vertex->m_nz * m_lightDirections[0].m_z + vertex->m_nx * m_lightDirections[0].m_x);
-			LegoS32 red = redBase - static_cast<LegoS32>(m_lightColorProducts[0].m_red * dot);
-			LegoS32 grn = grnBase - static_cast<LegoS32>(m_lightColorProducts[0].m_grn * dot);
-			LegoS32 blu = bluBase - static_cast<LegoS32>(m_lightColorProducts[0].m_blu * dot);
+			LegoFloat dot = (GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x));
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += (GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z));
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y +
-				  (vertex->m_nz * m_lightDirections[1].m_z + vertex->m_nx * m_lightDirections[1].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[1].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[1].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[1].m_blu * dot);
+			LegoFloat redProduct = m_lightColorProducts[0].m_red;
+			redProduct *= dot;
+			LegoS32 red = redBase - static_cast<LegoS32>(redProduct);
 
-			dot = vertex->m_ny * m_lightDirections[2].m_y +
-				  (vertex->m_nz * m_lightDirections[2].m_z + vertex->m_nx * m_lightDirections[2].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[2].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[2].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[2].m_blu * dot);
+			LegoFloat grnProduct = m_lightColorProducts[0].m_grn;
+			grnProduct *= dot;
+			LegoS32 grn = grnBase - static_cast<LegoS32>(grnProduct);
 
-			dot = vertex->m_ny * m_lightDirections[3].m_y +
-				  (vertex->m_nz * m_lightDirections[3].m_z + vertex->m_nx * m_lightDirections[3].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[3].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[3].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[3].m_blu * dot);
+			LegoFloat bluProduct = m_lightColorProducts[0].m_blu;
+			bluProduct *= dot;
+			LegoS32 blu = bluBase - static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			LegoFloat normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[1].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[1].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[1].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot = m_lightDirections[2].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[2].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[2].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[2].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[2].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[3].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_nx;
+			normalProduct *= m_lightDirections[3].m_x;
+			dot += normalProduct;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[3].m_y;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[3].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[3].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[3].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
 
 			if (red < redBase) {
 				color.m_red = static_cast<LegoU8>(redBase);
@@ -549,45 +597,115 @@ void GolModelRenderState::LightVertices5(
 )
 {
 	ColorRGBA color;
-	color.m_alp = m_activeMaterialColor.m_alp;
-
 	LegoS32 redBase = m_activeMaterialColor.m_red;
 	LegoS32 grnBase = m_activeMaterialColor.m_grn;
 	LegoS32 bluBase = m_activeMaterialColor.m_blu;
+	color.m_alp = m_activeMaterialColor.m_alp;
+
 	const CommandVertex* vertex = p_vertices + p_outputFirst;
 	const CommandVertex* end = vertex + p_vertexCount;
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_ny * m_lightDirections[0].m_y +
-							(vertex->m_nz * m_lightDirections[0].m_z + vertex->m_nx * m_lightDirections[0].m_x);
-			LegoS32 red = redBase - static_cast<LegoS32>(m_lightColorProducts[0].m_red * dot);
-			LegoS32 grn = grnBase - static_cast<LegoS32>(m_lightColorProducts[0].m_grn * dot);
-			LegoS32 blu = bluBase - static_cast<LegoS32>(m_lightColorProducts[0].m_blu * dot);
+			LegoFloat dot = (GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x));
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += (GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z));
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y +
-				  (vertex->m_nz * m_lightDirections[1].m_z + vertex->m_nx * m_lightDirections[1].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[1].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[1].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[1].m_blu * dot);
+			LegoFloat redProduct = m_lightColorProducts[0].m_red;
+			redProduct *= dot;
+			LegoS32 red = redBase - static_cast<LegoS32>(redProduct);
 
-			dot = vertex->m_ny * m_lightDirections[2].m_y +
-				  (vertex->m_nz * m_lightDirections[2].m_z + vertex->m_nx * m_lightDirections[2].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[2].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[2].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[2].m_blu * dot);
+			LegoFloat grnProduct = m_lightColorProducts[0].m_grn;
+			grnProduct *= dot;
+			LegoS32 grn = grnBase - static_cast<LegoS32>(grnProduct);
 
-			dot = vertex->m_ny * m_lightDirections[3].m_y +
-				  (vertex->m_nz * m_lightDirections[3].m_z + vertex->m_nx * m_lightDirections[3].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[3].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[3].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[3].m_blu * dot);
+			LegoFloat bluProduct = m_lightColorProducts[0].m_blu;
+			bluProduct *= dot;
+			LegoS32 blu = bluBase - static_cast<LegoS32>(bluProduct);
 
-			dot = vertex->m_ny * m_lightDirections[4].m_y +
-				  (vertex->m_nz * m_lightDirections[4].m_z + vertex->m_nx * m_lightDirections[4].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[4].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[4].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[4].m_blu * dot);
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			LegoFloat normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[1].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[1].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[1].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[2].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[2].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = ((m_lightColorProducts[2].m_red));
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = ((((((m_lightColorProducts[2].m_grn))))));
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[2].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[3].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_nx;
+			normalProduct *= m_lightDirections[3].m_x;
+			dot += normalProduct;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[3].m_y;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[3].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[3].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[3].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[4].m_x;
+			dot *= vertex->m_nx;
+			normalProduct = m_lightDirections[4].m_y;
+			normalProduct *= vertex->m_ny;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[4].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[4].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[4].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[4].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
 
 			if (red < redBase) {
 				color.m_red = static_cast<LegoU8>(redBase);
@@ -635,51 +753,136 @@ void GolModelRenderState::LightVertices6(
 )
 {
 	ColorRGBA color;
-	color.m_alp = m_activeMaterialColor.m_alp;
-
 	LegoS32 redBase = m_activeMaterialColor.m_red;
 	LegoS32 grnBase = m_activeMaterialColor.m_grn;
 	LegoS32 bluBase = m_activeMaterialColor.m_blu;
+	color.m_alp = m_activeMaterialColor.m_alp;
+
 	const CommandVertex* vertex = p_vertices + p_outputFirst;
 	const CommandVertex* end = vertex + p_vertexCount;
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_ny * m_lightDirections[0].m_y +
-							(vertex->m_nz * m_lightDirections[0].m_z + vertex->m_nx * m_lightDirections[0].m_x);
-			LegoS32 red = redBase - static_cast<LegoS32>(m_lightColorProducts[0].m_red * dot);
-			LegoS32 grn = grnBase - static_cast<LegoS32>(m_lightColorProducts[0].m_grn * dot);
-			LegoS32 blu = bluBase - static_cast<LegoS32>(m_lightColorProducts[0].m_blu * dot);
+			LegoFloat dot = (GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x));
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += (GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z));
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y +
-				  (vertex->m_nz * m_lightDirections[1].m_z + vertex->m_nx * m_lightDirections[1].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[1].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[1].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[1].m_blu * dot);
+			LegoFloat redProduct = m_lightColorProducts[0].m_red;
+			redProduct *= dot;
+			LegoS32 red = redBase - static_cast<LegoS32>(redProduct);
 
-			dot = vertex->m_ny * m_lightDirections[2].m_y +
-				  (vertex->m_nz * m_lightDirections[2].m_z + vertex->m_nx * m_lightDirections[2].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[2].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[2].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[2].m_blu * dot);
+			LegoFloat grnProduct = m_lightColorProducts[0].m_grn;
+			grnProduct *= dot;
+			LegoS32 grn = grnBase - static_cast<LegoS32>(grnProduct);
 
-			dot = vertex->m_ny * m_lightDirections[3].m_y +
-				  (vertex->m_nz * m_lightDirections[3].m_z + vertex->m_nx * m_lightDirections[3].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[3].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[3].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[3].m_blu * dot);
+			LegoFloat bluProduct = m_lightColorProducts[0].m_blu;
+			bluProduct *= dot;
+			LegoS32 blu = bluBase - static_cast<LegoS32>(bluProduct);
 
-			dot = vertex->m_ny * m_lightDirections[4].m_y +
-				  (vertex->m_nz * m_lightDirections[4].m_z + vertex->m_nx * m_lightDirections[4].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[4].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[4].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[4].m_blu * dot);
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			LegoFloat normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
 
-			dot = vertex->m_ny * m_lightDirections[5].m_y +
-				  (vertex->m_nz * m_lightDirections[5].m_z + vertex->m_nx * m_lightDirections[5].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[5].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[5].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[5].m_blu * dot);
+			redProduct = m_lightColorProducts[1].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[1].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[1].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[2].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[2].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = ((m_lightColorProducts[2].m_red));
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = ((((((m_lightColorProducts[2].m_grn))))));
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[2].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[3].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_nx;
+			normalProduct *= m_lightDirections[3].m_x;
+			dot += normalProduct;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[3].m_y;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[3].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[3].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[3].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[4].m_x;
+			dot *= vertex->m_nx;
+			normalProduct = m_lightDirections[4].m_y;
+			normalProduct *= vertex->m_ny;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[4].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[4].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = ((m_lightColorProducts[4].m_grn));
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[4].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[5].m_y;
+			dot *= vertex->m_ny;
+			normalProduct = m_lightDirections[5].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[5].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[5].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[5].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[5].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
 
 			if (red < redBase) {
 				color.m_red = static_cast<LegoU8>(redBase);
@@ -727,57 +930,158 @@ void GolModelRenderState::LightVertices7(
 )
 {
 	ColorRGBA color;
-	color.m_alp = m_activeMaterialColor.m_alp;
-
 	LegoS32 redBase = m_activeMaterialColor.m_red;
 	LegoS32 grnBase = m_activeMaterialColor.m_grn;
 	LegoS32 bluBase = m_activeMaterialColor.m_blu;
+	color.m_alp = m_activeMaterialColor.m_alp;
+
 	const CommandVertex* vertex = p_vertices + p_outputFirst;
 	const CommandVertex* end = vertex + p_vertexCount;
 
 	if (vertex < end) {
 		do {
-			LegoFloat dot = vertex->m_ny * m_lightDirections[0].m_y +
-							(vertex->m_nz * m_lightDirections[0].m_z + vertex->m_nx * m_lightDirections[0].m_x);
-			LegoS32 red = redBase - static_cast<LegoS32>(m_lightColorProducts[0].m_red * dot);
-			LegoS32 grn = grnBase - static_cast<LegoS32>(m_lightColorProducts[0].m_grn * dot);
-			LegoS32 blu = bluBase - static_cast<LegoS32>(m_lightColorProducts[0].m_blu * dot);
+			LegoFloat dot = (GOL_MUL(vertex->m_nx, m_lightDirections[0].m_x));
+			dot += GOL_MUL(vertex->m_ny, m_lightDirections[0].m_y);
+			dot += (GOL_MUL(vertex->m_nz, m_lightDirections[0].m_z));
+			LegoFloat normalProduct;
 
-			dot = vertex->m_ny * m_lightDirections[1].m_y +
-				  (vertex->m_nz * m_lightDirections[1].m_z + vertex->m_nx * m_lightDirections[1].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[1].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[1].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[1].m_blu * dot);
+			LegoFloat redProduct = m_lightColorProducts[0].m_red;
+			redProduct *= dot;
+			LegoS32 red = redBase - static_cast<LegoS32>(redProduct);
 
-			dot = vertex->m_ny * m_lightDirections[2].m_y +
-				  (vertex->m_nz * m_lightDirections[2].m_z + vertex->m_nx * m_lightDirections[2].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[2].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[2].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[2].m_blu * dot);
+			LegoFloat grnProduct = m_lightColorProducts[0].m_grn;
+			grnProduct *= dot;
+			LegoS32 grn = grnBase - static_cast<LegoS32>(grnProduct);
 
-			dot = vertex->m_ny * m_lightDirections[3].m_y +
-				  (vertex->m_nz * m_lightDirections[3].m_z + vertex->m_nx * m_lightDirections[3].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[3].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[3].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[3].m_blu * dot);
+			LegoFloat bluProduct = m_lightColorProducts[0].m_blu;
+			bluProduct *= dot;
+			LegoS32 blu = bluBase - static_cast<LegoS32>(bluProduct);
 
-			dot = vertex->m_ny * m_lightDirections[4].m_y +
-				  (vertex->m_nz * m_lightDirections[4].m_z + vertex->m_nx * m_lightDirections[4].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[4].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[4].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[4].m_blu * dot);
+			dot = m_lightDirections[1].m_y;
+			dot *= vertex->m_ny;
+			normalProduct = m_lightDirections[1].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[1].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
 
-			dot = vertex->m_ny * m_lightDirections[5].m_y +
-				  (vertex->m_nz * m_lightDirections[5].m_z + vertex->m_nx * m_lightDirections[5].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[5].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[5].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[5].m_blu * dot);
+			redProduct = m_lightColorProducts[1].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
 
-			dot = vertex->m_ny * m_lightDirections[6].m_y +
-				  (vertex->m_nz * m_lightDirections[6].m_z + vertex->m_nx * m_lightDirections[6].m_x);
-			red -= static_cast<LegoS32>(m_lightColorProducts[6].m_red * dot);
-			grn -= static_cast<LegoS32>(m_lightColorProducts[6].m_grn * dot);
-			blu -= static_cast<LegoS32>(m_lightColorProducts[6].m_blu * dot);
+			grnProduct = m_lightColorProducts[1].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[1].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[2].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[2].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[2].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = ((m_lightColorProducts[2].m_red));
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = ((((((m_lightColorProducts[2].m_grn))))));
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[2].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[3].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_nx;
+			normalProduct *= m_lightDirections[3].m_x;
+			dot += normalProduct;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[3].m_y;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[3].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[3].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[3].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[4].m_x;
+			dot *= vertex->m_nx;
+			normalProduct = m_lightDirections[4].m_y;
+			normalProduct *= vertex->m_ny;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[4].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+
+			redProduct = m_lightColorProducts[4].m_red;
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = ((m_lightColorProducts[4].m_grn));
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[4].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[5].m_y;
+			dot *= vertex->m_ny;
+			normalProduct = m_lightDirections[5].m_z;
+			normalProduct *= vertex->m_nz;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[5].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = (m_lightColorProducts[5].m_red);
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[5].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[5].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
+
+			dot = m_lightDirections[6].m_z;
+			dot *= vertex->m_nz;
+			normalProduct = vertex->m_ny;
+			normalProduct *= m_lightDirections[6].m_y;
+			dot += normalProduct;
+			normalProduct = m_lightDirections[6].m_x;
+			normalProduct *= vertex->m_nx;
+			dot += normalProduct;
+
+			redProduct = (((m_lightColorProducts[6].m_red)));
+			redProduct *= dot;
+			red -= static_cast<LegoS32>(redProduct);
+
+			grnProduct = m_lightColorProducts[6].m_grn;
+			grnProduct *= dot;
+			grn -= static_cast<LegoS32>(grnProduct);
+
+			bluProduct = m_lightColorProducts[6].m_blu;
+			bluProduct *= dot;
+			blu -= static_cast<LegoS32>(bluProduct);
 
 			if (red < redBase) {
 				color.m_red = static_cast<LegoU8>(redBase);

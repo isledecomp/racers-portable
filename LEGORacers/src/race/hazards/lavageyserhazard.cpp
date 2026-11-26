@@ -18,8 +18,6 @@
 
 DECOMP_SIZE_ASSERT(LavaGeyserHazard, 0x5c)
 
-extern const LegoFloat g_unk0x004afde0;
-
 // GLOBAL: LEGORACERS 0x004b44b8
 extern const LegoFloat g_lavaGeyserSoundMaxDistance = 300.0f;
 
@@ -145,9 +143,12 @@ void LavaGeyserHazard::Update(undefined4 p_elapsedMs)
 	{
 		GolVec3 localPosition;
 		transform->GetPosition(&localPosition);
-		localPosition.m_x *= scale;
-		localPosition.m_y *= scale;
-		localPosition.m_z *= scale;
+		LegoFloat x = localPosition.m_x * scale;
+		LegoFloat y = localPosition.m_y * scale;
+		LegoFloat z = localPosition.m_z * scale;
+		localPosition.m_x = x;
+		localPosition.m_y = y;
+		localPosition.m_z = z;
 
 		GolVec3 position;
 		m_entity->LocalToWorld(localPosition, &position);
@@ -182,7 +183,7 @@ void LavaGeyserHazard::Update(undefined4 p_elapsedMs)
 	if (m_eventMs == 0) {
 		for (LegoS32 i = 0; i < c_lavaPositionCount; i++) {
 			LegoFloat startFrame = g_lavaGeyserLavaStartFrames[i];
-			startFrame += g_unk0x004afde0;
+			startFrame += 10.0f;
 			if (frame > g_lavaGeyserLavaStartFrames[i] && startFrame > frame) {
 				effectPosition = g_lavaGeyserLavaPositions[i];
 				if (m_unk0x58) {
@@ -198,7 +199,7 @@ void LavaGeyserHazard::Update(undefined4 p_elapsedMs)
 			}
 
 			LegoFloat endFrame = g_lavaGeyserLavaEndFrames[i];
-			endFrame += g_unk0x004afde0;
+			endFrame += 10.0f;
 			if (frame > g_lavaGeyserLavaEndFrames[i] && endFrame > frame) {
 				effectPosition = g_lavaGeyserLavaPositions[i];
 				if (m_unk0x58) {

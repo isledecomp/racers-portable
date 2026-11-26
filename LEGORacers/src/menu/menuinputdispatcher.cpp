@@ -63,13 +63,11 @@ LegoS32 MenuInputDispatcher::InitializeCursor(InitStruct* p_initStruct)
 	bounds.m_left = 0;
 	bounds.m_top = 0;
 	bounds.m_right = m_screenWidth - p_initStruct->m_cursorImage->m_width;
-	LegoS32 bottom = m_screenHeight;
-	bottom -= p_initStruct->m_cursorImage->m_height;
-	bounds.m_bottom = bottom;
+	bounds.m_bottom = m_screenHeight - p_initStruct->m_cursorImage->m_height;
 
-	cursorInit.m_cursorImage = p_initStruct->m_cursorImage;
 	cursorInit.m_golExport = p_initStruct->m_golExport;
 	cursorInit.m_renderer = p_initStruct->m_renderer;
+	cursorInit.m_cursorImage = p_initStruct->m_cursorImage;
 	cursorInit.m_inputManager = p_initStruct->m_inputManager;
 	cursorInit.m_bounds = &bounds;
 	cursorInit.m_initialCursorX = 0;
@@ -245,13 +243,11 @@ LegoS32 MenuInputDispatcher::ProcessInputEvents(MenuIcon*)
 		case c_joystickButton1:
 			break;
 		default:
-			MenuIcon* icon = m_activeScreen->GetRootIcon();
-
 			if (item->m_isPressed) {
-				icon->DispatchKeyDown(item, x, y);
+				m_activeScreen->GetRootIcon()->DispatchKeyDown(item, x, y);
 			}
 			else {
-				icon->DispatchKeyUp(item, x, y);
+				m_activeScreen->GetRootIcon()->DispatchKeyUp(item, x, y);
 			}
 			break;
 		}

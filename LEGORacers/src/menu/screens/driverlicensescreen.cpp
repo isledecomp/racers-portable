@@ -192,18 +192,20 @@ LegoBool32 DriverLicenseScreen::HasUnsavedChanges()
 	DriverCosmetics cosmetics;
 	undefined2 buffer[24];
 
-	if (m_context->m_modelBuilder.GetMenuFlowFlags() & DriverModelBuilder::c_menuFlowNewRacer) {
+	if (m_context->m_modelBuilder.m_menuFlowFlags & DriverModelBuilder::c_menuFlowNewRacer) {
 		return TRUE;
 	}
 
 	::memset(buffer, 0, sizeof(buffer));
 	name.CopyFromBufSelection(buffer, 0x17);
-	m_nameString.CopyFromBufSelection(m_nameEntry.GetBuffer(), 0);
+	GolString* nameString = &m_nameString;
+	nameString->CopyFromBufSelection(m_nameEntry.GetBuffer(), 0);
 
-	m_context->m_saveSystem.GetActiveRecord().GetName(&name);
-	m_context->m_saveSystem.GetActiveRecord().GetCosmetics(&cosmetics);
+	ActiveRecordBuffer& record = m_context->m_saveSystem.GetActiveRecord();
+	record.GetName(&name);
+	record.GetCosmetics(&cosmetics);
 
-	if (!name.GolStrcmp(&m_nameString)) {
+	if (!name.GolStrcmp(nameString)) {
 		return TRUE;
 	}
 

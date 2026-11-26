@@ -9,8 +9,6 @@
 
 DECOMP_SIZE_ASSERT(HomingProjectile, 0xf8)
 
-extern const LegoFloat g_unk0x004afde0;
-
 // GLOBAL: LEGORACERS 0x004b0224
 extern const LegoFloat g_homingProjectileTargetHeightOffset = 5.0f;
 
@@ -37,6 +35,26 @@ const LegoFloat g_homingProjectilePathDistanceLimitSquared = 90000.0f;
 
 // GLOBAL: LEGORACERS 0x004b0268
 extern const LegoFloat g_homingProjectileCollisionProbeDepth = 50.0f;
+
+inline void SubtractVectors(const GolVec3& p_left, const GolVec3& p_right, GolVec3* p_dest)
+{
+	p_dest->m_x = p_left.m_x - p_right.m_x;
+	p_dest->m_y = p_left.m_y - p_right.m_y;
+	p_dest->m_z = p_left.m_z - p_right.m_z;
+}
+
+inline LegoFloat DotVectors(const GolVec3& p_left, const GolVec3& p_right)
+{
+	LegoFloat result = p_left.m_z;
+	LegoFloat z = p_right.m_z;
+	result *= z;
+	LegoFloat y = p_left.m_y;
+	LegoFloat rightY = p_right.m_y;
+	y *= rightY;
+	result += y;
+	result += p_left.m_x * p_right.m_x;
+	return result;
+}
 
 // FUNCTION: LEGORACERS 0x00423590
 HomingProjectile::HomingProjectile()
@@ -88,73 +106,84 @@ void HomingProjectile::UpdateTargeting(
 {
 	m_retargetTimerMs += p_elapsedMs;
 
-	Racer* noTarget = NULL;
-	Racer* target = m_targetRacer;
-	if (target == noTarget || m_retargetTimerMs > c_targetRefreshMs ||
-		(target->m_physics.m_flags & RacerPhysics::c_flagSpinOut) || (target->m_flags & c_invalidTargetMask)) {
+	if (m_targetRacer == NULL || m_retargetTimerMs > c_targetRefreshMs ||
+		(m_targetRacer->m_physics.m_flags & RacerPhysics::c_flagSpinOut) ||
+		(m_targetRacer->m_flags & c_invalidTargetMask)) {
 		m_retargetTimerMs = 0;
-		target =
+		m_targetRacer =
 			p_raceState
 				->FindRacerInCone(&m_position, &m_direction, p_minDistanceSquared, p_maxDistanceSquared, p_coneCosine);
-		m_targetRacer = target;
-
-		while (target != noTarget) {
-			if (target != m_ownerRacer && !(target->m_physics.m_flags & RacerPhysics::c_flagSpinOut) &&
-				!(target->m_flags & c_invalidTargetMask)) {
+		while (m_targetRacer != NULL) {
+			if (m_targetRacer != m_ownerRacer && !(m_targetRacer->m_physics.m_flags & RacerPhysics::c_flagSpinOut) &&
+				!(m_targetRacer->m_flags & c_invalidTargetMask)) {
 				break;
 			}
 
-			target = p_raceState->FindNextRacerInCone(
-				target,
+			m_targetRacer = p_raceState->FindNextRacerInCone(
+				m_targetRacer,
 				&m_position,
 				&m_direction,
 				p_minDistanceSquared,
 				p_maxDistanceSquared,
 				p_coneCosine
 			);
-			m_targetRacer = target;
 		}
 	}
 
 	if (!m_hasWaypoint && m_pathEntry != NULL) {
-		CheckpointGraph::Entry* pathField = m_pathEntry;
-		GolVec3 point = pathField->m_position;
+		GolVec3 point = m_pathEntry->m_position;
+		GolVec3 delta;
+		GolVec3 start;
+		GolVec3 end;
+		delta.m_x = point.m_x - m_position.m_x;
+		delta.m_y = point.m_y - m_position.m_y;
+		delta.m_z = point.m_z - m_position.m_z;
+
 		for (;;) {
-			GolVec3 delta = point - m_position;
-			if (GOLVECTOR3_DOT(delta, m_direction) > 0.0f &&
-				GOLVECTOR3_DOT(pathField->m_planeNormal, m_position) + pathField->m_planeDistance >= g_unk0x004afde0) {
+			if (DotVectors(delta, m_direction) > 0.0f &&
+				DotVectors(m_position, m_pathEntry->m_planeNormal) + m_pathEntry->m_planeDistance >= 10.0f) {
 				break;
 			}
 
-			pathField = m_ownerRacer->m_checkpointGraph->GetCheckpoint(pathField->m_next.m_items[0]);
+			LegoU8 nextIndex = m_pathEntry->m_next.m_items[0];
+			CheckpointGraph* graph = m_ownerRacer->m_checkpointGraph;
+			CheckpointGraph::Entry* pathField = graph->GetCheckpoint(nextIndex);
 			m_pathEntry = pathField;
-			if (pathField != NULL) {
-				point = pathField->m_position;
-				delta = point - m_position;
-				if (GOLVECTOR3_DOT(delta, delta) > g_homingProjectilePathDistanceLimitSquared ||
-					GOLVECTOR3_DOT(pathField->m_planeNormal, m_direction) > 0.0f) {
-					m_pathEntry = NULL;
-				}
+			if (pathField == NULL) {
+				break;
 			}
 
-			if (m_pathEntry == NULL) {
+			point = pathField->m_position;
+			if (m_position.DistanceSquaredTo(point) > g_homingProjectilePathDistanceLimitSquared) {
+				m_pathEntry = NULL;
+				break;
+			}
+
+			delta.m_x = point.m_x - m_position.m_x;
+			delta.m_y = point.m_y - m_position.m_y;
+			delta.m_z = point.m_z - m_position.m_z;
+
+			GolVec3 normal;
+			normal.m_x = pathField->m_planeNormal.m_x;
+			normal.m_y = pathField->m_planeNormal.m_y;
+			normal.m_z = pathField->m_planeNormal.m_z;
+			if (DotVectors(m_direction, normal) > 0.0f) {
+				m_pathEntry = NULL;
 				break;
 			}
 		}
 
 		if (m_pathEntry != NULL) {
-			GolVec3 hit = point;
-			GolVec3 start = point;
-			GolVec3 end = point;
+			start = point;
+			end = point;
 			start.m_z += 5.0f;
 			end.m_z -= g_homingProjectileCollisionProbeDepth;
 
 			GolBoundingVolume::HitTriangle record;
-			if (m_collisionWorld->IntersectSegmentAndFireEvents(&start, &end, &record, &hit)) {
+			if (m_collisionWorld->IntersectSegmentAndFireEvents(&start, &end, &record, &point)) {
+				point.m_z += g_homingProjectileCollisionHitLift;
+				m_waypointPosition = point;
 				m_hasWaypoint = 1;
-				m_waypointPosition.m_x = hit.m_x;
-				m_waypointPosition.m_y = hit.m_y;
-				m_waypointPosition.m_z = hit.m_z + g_homingProjectileCollisionHitLift;
 			}
 		}
 	}
@@ -199,9 +228,8 @@ void HomingProjectile::StartHoming()
 // FUNCTION: LEGORACERS 0x00423a20
 LegoS32 HomingProjectile::Update(LegoU32 p_elapsedMs)
 {
-	LegoU32 state = m_state;
-	if (state != c_stateFlying) {
-		return state;
+	if (m_state != c_stateFlying) {
+		return m_state;
 	}
 
 	m_ageMs += p_elapsedMs;
@@ -214,7 +242,7 @@ LegoS32 HomingProjectile::Update(LegoU32 p_elapsedMs)
 	LegoFloat elapsedSeconds = static_cast<LegoFloat>(static_cast<LegoS32>(p_elapsedMs)) * 0.001f;
 	LegoFloat targetDistanceSquared;
 	GolVec3 nextPosition;
-	GolVec3 previousPosition;
+
 	GolVec3 start;
 	GolVec3 end;
 	GolBoundingVolume::HitTriangle record;
@@ -223,42 +251,39 @@ LegoS32 HomingProjectile::Update(LegoU32 p_elapsedMs)
 	if (target != NULL) {
 		target->m_visuals.m_carEntity->GetPosition(&m_targetPosition);
 		m_targetPosition.m_z += g_homingProjectileTargetHeightOffset;
-		m_direction.m_x = m_targetPosition.m_x - m_position.m_x;
-		m_direction.m_y = m_targetPosition.m_y - m_position.m_y;
-		m_direction.m_z = m_targetPosition.m_z - m_position.m_z;
-		targetDistanceSquared = m_direction.m_z * m_direction.m_z;
-		targetDistanceSquared += m_direction.m_y * m_direction.m_y;
-		targetDistanceSquared += m_direction.m_x * m_direction.m_x;
+		SubtractVectors(m_targetPosition, m_position, &m_direction);
+		targetDistanceSquared = DotVectors(m_direction, m_direction);
 	}
 	else {
 		targetDistanceSquared = FLT_MAX;
 	}
 
-	GolVec3* direction = &m_direction;
 	if (targetDistanceSquared < g_homingProjectileTargetSnapDistanceSquared) {
+		GolVec3* direction = &m_direction;
 		GolMath::NormalizeVector3(*direction, direction);
 
-		LegoFloat speed = static_cast<LegoFloat>(
-			sqrt(m_velocityZ * m_velocityZ + m_velocityY * m_velocityY + m_velocityX * m_velocityX)
-		);
-		m_velocity.m_x = speed * direction->m_x;
-		m_velocity.m_y = speed * direction->m_y;
-		m_velocity.m_z = speed * direction->m_z;
+		LegoFloat velocityX = m_velocityX;
+		LegoFloat velocityY = m_velocityY;
+		LegoFloat velocityZ = m_velocityZ;
+		LegoFloat speed =
+			static_cast<LegoFloat>(sqrt(velocityZ * velocityZ + velocityY * velocityY + velocityX * velocityX));
+		GolMath::ScaleVector3(direction, speed, &m_velocity);
 
 		if (targetDistanceSquared < g_homingProjectileTargetDirectHitDistanceSquared) {
-			m_hitPosition = m_targetPosition;
-			m_worldEntity->SetPosition(m_hitPosition);
-			m_state = c_stateExpired;
-			return c_stateExpired;
+			nextPosition = m_position;
+			targetDistanceSquared = 0.0f;
+		}
+		else {
+			GolVec3 step;
+			GolMath::ScaleVector3(&m_velocity, elapsedSeconds, &step);
+			nextPosition.m_x = step.m_x + m_position.m_x;
+			nextPosition.m_y = step.m_y + m_position.m_y;
+			nextPosition.m_z = step.m_z + m_position.m_z;
+
+			GolVec3 remaining = m_targetPosition - nextPosition;
+			targetDistanceSquared = DotVectors(remaining, *direction);
 		}
 
-		nextPosition.m_x = m_position.m_x + m_velocity.m_x * elapsedSeconds;
-		nextPosition.m_y = m_position.m_y + m_velocity.m_y * elapsedSeconds;
-		nextPosition.m_z = m_position.m_z + m_velocity.m_z * elapsedSeconds;
-
-		targetDistanceSquared = (m_targetPosition.m_z - nextPosition.m_z) * direction->m_z;
-		targetDistanceSquared += (m_targetPosition.m_y - nextPosition.m_y) * direction->m_y;
-		targetDistanceSquared += (m_targetPosition.m_x - nextPosition.m_x) * direction->m_x;
 		if (targetDistanceSquared <= 0.0f) {
 			m_hitPosition = m_targetPosition;
 			m_worldEntity->SetPosition(m_hitPosition);
@@ -268,35 +293,33 @@ LegoS32 HomingProjectile::Update(LegoU32 p_elapsedMs)
 	}
 	else {
 		if (m_hasWaypoint) {
-			end.m_x = m_waypointPosition.m_x - m_position.m_x;
-			end.m_y = m_waypointPosition.m_y - m_position.m_y;
-			end.m_z = m_waypointPosition.m_z - m_position.m_z;
-			if (GOLVECTOR3_DOT(end, m_direction) > 0.0f) {
-				m_direction.m_x = end.m_x;
-				m_direction.m_y = end.m_y;
-				m_direction.m_z = end.m_z;
+			GolVec3 delta;
+			delta.m_x = m_waypointPosition.m_x - m_position.m_x;
+			delta.m_y = m_waypointPosition.m_y - m_position.m_y;
+			delta.m_z = m_waypointPosition.m_z - m_position.m_z;
+			if (DotVectors(m_direction, delta) > 0.0f) {
+				m_direction = delta;
 			}
 			else {
 				m_hasWaypoint = 0;
 			}
 		}
 
+		GolVec3* direction = &m_direction;
 		GolMath::NormalizeVector3(*direction, direction);
-		m_velocity.m_x = m_speed * direction->m_x;
-		m_velocity.m_y = m_speed * direction->m_y;
-		m_velocity.m_z = m_speed * direction->m_z;
-		nextPosition.m_x = m_position.m_x + m_velocity.m_x * elapsedSeconds;
-		nextPosition.m_y = m_position.m_y + m_velocity.m_y * elapsedSeconds;
-		nextPosition.m_z = m_position.m_z + m_velocity.m_z * elapsedSeconds;
+		GolMath::ScaleVector3(direction, m_speed, &m_velocity);
+		GolVec3 step;
+		GolMath::ScaleVector3(&m_velocity, elapsedSeconds, &step);
+		nextPosition.m_x = step.m_x + m_position.m_x;
+		nextPosition.m_y = step.m_y + m_position.m_y;
+		nextPosition.m_z = step.m_z + m_position.m_z;
 
 		start.m_x = nextPosition.m_x;
 		start.m_y = nextPosition.m_y;
-		start.m_z = nextPosition.m_z;
+		start.m_z = nextPosition.m_z + g_homingProjectileGroundProbeStartOffset;
 		end.m_x = nextPosition.m_x;
 		end.m_y = nextPosition.m_y;
-		end.m_z = nextPosition.m_z;
-		start.m_z += g_homingProjectileGroundProbeStartOffset;
-		end.m_z -= g_homingProjectileCollisionHitLift;
+		end.m_z = nextPosition.m_z - g_homingProjectileCollisionHitLift;
 
 		if (m_collisionWorld->IntersectSegmentAndFireEvents(&start, &end, &record, &m_hitPosition)) {
 			nextPosition.m_z = m_hitPosition.m_z + g_homingProjectileCollisionHitLift;
@@ -310,11 +333,11 @@ LegoS32 HomingProjectile::Update(LegoU32 p_elapsedMs)
 	}
 
 	m_position = nextPosition;
-	ApplySpiral(elapsedSeconds, direction, &nextPosition);
+	ApplySpiral(elapsedSeconds, &m_direction, &nextPosition);
 
-	m_worldEntity->GetPosition(&previousPosition);
+	m_worldEntity->GetPosition(&start);
 
-	if (m_collisionWorld->IntersectSegmentAndFireEvents(&previousPosition, &nextPosition, &record, &m_hitPosition)) {
+	if (m_collisionWorld->IntersectSegmentAndFireEvents(&start, &nextPosition, &record, &m_hitPosition)) {
 		m_hitNormal.m_x = record.m_normal.m_x;
 		m_hitNormal.m_y = record.m_normal.m_y;
 		m_hitNormal.m_z = record.m_normal.m_z;
