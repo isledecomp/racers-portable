@@ -702,7 +702,7 @@ void RaceDecalManager::Trail::Decal::EmitPolygon(LegoU32 p_firstPolygon, LegoU32
 				outputCount = 0;
 			}
 
-			if (combinedFlags & c_clipXMaxFlag) {
+			if ((combinedFlags & c_clipXMaxFlag) && inputCount > 0) {
 				LegoS32 previousIndex = inputCount - 1;
 				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipXMaxFlag;
 
@@ -753,7 +753,7 @@ void RaceDecalManager::Trail::Decal::EmitPolygon(LegoU32 p_firstPolygon, LegoU32
 				outputCount = 0;
 			}
 
-			if (combinedFlags & c_clipYMinFlag) {
+			if ((combinedFlags & c_clipYMinFlag) && inputCount > 0) {
 				LegoS32 previousIndex = inputCount - 1;
 				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMinFlag;
 
@@ -800,7 +800,7 @@ void RaceDecalManager::Trail::Decal::EmitPolygon(LegoU32 p_firstPolygon, LegoU32
 				outputCount = 0;
 			}
 
-			if (combinedFlags & c_clipYMaxFlag) {
+			if ((combinedFlags & c_clipYMaxFlag) && inputCount > 0) {
 				LegoS32 previousIndex = inputCount - 1;
 				LegoU32 previousOutside = inputFlags[previousIndex] & c_clipYMaxFlag;
 

@@ -673,8 +673,8 @@ void RaceState::UpdateStandings()
 	LegoU32 groupStart;
 	for (groupStart = 0; groupStart < m_roster.m_racerCount - 1;) {
 		LegoU32 groupEnd = groupStart + 1;
-		while (g_racerProgressEntries[groupStart].m_progress == g_racerProgressEntries[groupEnd].m_progress &&
-			   groupEnd < m_roster.m_racerCount) {
+		while (groupEnd < m_roster.m_racerCount &&
+			   g_racerProgressEntries[groupStart].m_progress == g_racerProgressEntries[groupEnd].m_progress) {
 			groupEnd++;
 		}
 
