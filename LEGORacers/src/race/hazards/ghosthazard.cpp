@@ -24,12 +24,8 @@
 DECOMP_SIZE_ASSERT(GhostHazard, 0x220)
 
 extern LegoFloat g_cosineTable[1024];
-extern const LegoFloat g_unk0x004b02fc;
-extern const LegoFloat g_negativeRadiansToTableIndex;
 extern LegoU16 g_randomTable[1024];
 extern LegoU32 g_randomTableIndex;
-extern LegoFloat g_carBuildPreviewMouseScale;
-extern const LegoFloat g_hazardPi;
 
 // GLOBAL: LEGORACERS 0x004b43c0
 extern const LegoFloat g_ghostLoopSoundMinDistance = 30.0f;
@@ -207,9 +203,9 @@ void GhostHazard::Update(undefined4 p_elapsedMs)
 
 		SoundVector position;
 		transform->GetPosition(&position);
-		position.m_x *= scale;
-		position.m_y *= scale;
-		position.m_z *= scale;
+		position.m_x = GOL_MUL(position.m_x, scale);
+		position.m_y = GOL_MUL(position.m_y, scale);
+		position.m_z = GOL_MUL(position.m_z, scale);
 
 		GolVec3 worldPosition;
 		m_ghostEntity->LocalToWorld(position, &worldPosition);
@@ -256,9 +252,9 @@ void GhostHazard::Update(undefined4 p_elapsedMs)
 			m_ghostEntity->SamplePartRotation(0, 1, 0, trailFrame, &rotation);
 			m_ghostEntity->SamplePartPosition(0, 1, 0, trailFrame, &position);
 
-			GolMatrix3 orientation;
+			GolMatrix34 orientation;
 			GolMath::QuatToMatrix3(&rotation, &orientation.m_m[0][0]);
-			modelEntity->SetOrientationMatrix(orientation);
+			modelEntity->SetOrientationMatrix(orientation.m_orientation);
 
 			position.m_x *= scale;
 			position.m_y *= scale;
@@ -279,15 +275,15 @@ void GhostHazard::Update(undefined4 p_elapsedMs)
 				LegoS32 randomFrequency =
 					static_cast<LegoS32>(g_randomTable[g_randomTableIndex]) % c_randomFrequencyVariantCount;
 				LegoFloat frequencyScale = static_cast<LegoFloat>(randomFrequency);
-				frequencyScale *= g_carBuildPreviewMouseScale;
+				frequencyScale *= 0.01f;
 				frequencyScale *= g_ghostFrequencyScaleJitter;
 				m_frequencyJitter = frequencyScale;
 			}
 
 			LegoFloat phase = static_cast<LegoFloat>(static_cast<LegoS32>(m_soundJitterMs));
-			phase *= g_unk0x004b02fc;
-			phase *= g_hazardPi;
-			phase *= g_negativeRadiansToTableIndex;
+			phase *= 0.002f;
+			phase *= 3.1415927f;
+			phase *= -162.97466f;
 			LegoS32 index = 0xffffff00 - static_cast<LegoS32>(phase);
 			index &= c_randomTableMask;
 			m_loopSound->SetFrequencyScale(1.0f - g_cosineTable[index] * m_frequencyJitter);
@@ -317,8 +313,13 @@ void GhostHazard::OnEvent(LegoEventQueue::CallbackData* p_data)
 	physics->m_velocity.m_y = impulse.m_y;
 	physics->m_velocity.m_z = impulse.m_z;
 
-	impulse.m_x = impulse.m_z;
-	impulse.m_y = impulse.m_z;
+	GolVec3 up;
+	up.m_x = 0.0f;
+	up.m_y = 0.0f;
+	up.m_z = 1.0f;
+
+	impulse.m_x = up.m_x * g_ghostImpulseVectorZ;
+	impulse.m_y = up.m_y * g_ghostImpulseVectorZ;
 	LegoFloat impulseZ = g_ghostImpulseVectorZ;
 	impulse.m_z = impulseZ;
 	physics->ApplyImpulse(&impulse, &impulse);

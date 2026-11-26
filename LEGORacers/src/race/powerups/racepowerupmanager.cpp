@@ -37,7 +37,6 @@ DECOMP_SIZE_ASSERT(WarpAction, 0xe4)
 
 extern LegoU16 g_randomTable[1024];
 extern LegoU32 g_randomTableIndex;
-extern const LegoFloat g_unk0x004b02e0;
 extern const LegoFloat g_aimMinDistanceSquared;
 extern const LegoFloat g_aimMaxDistanceSquared;
 extern const LegoFloat g_aimRacerConeCosine;
@@ -1872,52 +1871,48 @@ PowerupAction* RacePowerupManager::ReclaimAction(
 // FUNCTION: LEGORACERS 0x0045b3a0
 PowerupExplosion* __stdcall RacePowerupManager::ReclaimExplosion(PowerupExplosion** p_head)
 {
-	PowerupExplosion* selected = NULL;
 	PowerupExplosion* selectedPrevious = NULL;
+	PowerupExplosion* selected = NULL;
+	PowerupExplosion* current = *p_head;
 	LegoU32 selectedRemaining = 0xffffffff;
 	LegoS32 targetState = PowerupExplosion::c_stateScarFading;
 	LegoU32 pass = 0;
-	PowerupExplosion* current = *p_head;
 	PowerupExplosion* head = current;
 
-	for (;;) {
+	for (; pass < 3; pass++) {
 		PowerupExplosion* previous = NULL;
+		if (current != NULL) {
+			do {
+				if (targetState == current->GetState() && current->GetRemainingMs() < selectedRemaining) {
+					selectedRemaining = current->GetRemainingMs();
+					selected = current;
+					selectedPrevious = previous;
+				}
+				previous = current;
+				current = current->GetNext();
+			} while (current != NULL);
 
-		while (current != NULL) {
-			if (current->GetState() == targetState && current->GetRemainingMs() < selectedRemaining) {
-				selectedRemaining = current->GetRemainingMs();
-				selected = current;
-				selectedPrevious = previous;
+			if (selected != NULL) {
+				break;
 			}
 
-			previous = current;
-			current = current->GetNext();
-		}
-
-		if (selected == NULL) {
 			current = head;
-			targetState = PowerupExplosion::c_stateExploding;
-			pass++;
-			if (pass < 3) {
-				continue;
-			}
-
-			PowerupExplosion* result = current;
-			*p_head = result->GetNext();
-			result->SetNext(NULL);
-			return result;
 		}
+		targetState = PowerupExplosion::c_stateExploding;
+	}
 
-		break;
+	if (selected == NULL) {
+		selected = current;
+		selectedPrevious = NULL;
 	}
 
 	if (selectedPrevious == NULL) {
 		*p_head = selected->GetNext();
-		selected->SetNext(selectedPrevious);
-		return selected;
+	}
+	else {
+		selectedPrevious->SetNext(selected->GetNext());
 	}
 
-	selectedPrevious->SetNext(selected->GetNext());
 	selected->SetNext(NULL);
 	return selected;
 }
@@ -1975,12 +1970,12 @@ void RacePowerupManager::SpawnBrickDebris(const GolVec3* p_position, const GolVe
 			g_randomTableIndex = (g_randomTableIndex + 1) & c_randomTableMask;
 			position.m_z = 0.0f;
 			LegoS32 offsetX = g_randomTable[g_randomTableIndex] % c_randomOffsetRange;
-			position.m_x = p_direction->m_x + offsetX * 0.0040000002f - g_unk0x004b02e0;
+			position.m_x = p_direction->m_x + offsetX * 0.0040000002f - 0.2f;
 
 			g_randomTableIndex = (g_randomTableIndex + 1) & c_randomTableMask;
 			LegoS32 offsetY = g_randomTable[g_randomTableIndex] % c_randomOffsetRange;
 
-			position.m_y = p_direction->m_y + offsetY * 0.0040000002f - g_unk0x004b02e0;
+			position.m_y = p_direction->m_y + offsetY * 0.0040000002f - 0.2f;
 			brickDebris->Spawn(p_position, &position, p_racer);
 		} while (--remaining != 0);
 	}

@@ -102,24 +102,18 @@ void BeamMesh::Initialize(const SetupParams* p_params)
 	LegoU32 segmentCount = m_segmentCount;
 	m_textureColumnCount = params->m_textureColumnCount;
 
-	LegoU32 generatedPointCount;
 	if (m_material->GetFlags() & GolMaterial::c_flagTextured) {
-		generatedPointCount = 0;
-		if (m_textureColumnCount <= segmentCount) {
-			generatedPointCount = segmentCount - m_textureColumnCount;
-		}
-		generatedPointCount += segmentCount + 1;
+		m_vertexCapacity =
+			(segmentCount + (m_textureColumnCount > segmentCount ? 0 : segmentCount - m_textureColumnCount) + 1) *
+			m_sectionCount * m_ringVertexCount;
 	}
 	else {
-		generatedPointCount = segmentCount + 1;
+		m_vertexCapacity = (segmentCount + 1) * m_sectionCount * m_ringVertexCount;
 	}
 
-	m_vertexCapacity = generatedPointCount * m_sectionCount * m_ringVertexCount;
-	if (segmentCount >= m_textureColumnCount) {
-		segmentCount = 2 * segmentCount - m_textureColumnCount + 1;
-	}
-
-	LegoU32 stride = segmentCount * m_ringVertexCount;
+	LegoU32 stride =
+		(segmentCount >= m_textureColumnCount ? 2 * segmentCount - m_textureColumnCount + 1 : segmentCount + 1) *
+		m_ringVertexCount;
 	LegoU32 vertexCount = m_sectionCount * (2 * (0x40 / stride) + 5) + 2;
 	m_model = m_golExport->CreateModel();
 	m_model->Allocate(params->m_renderer, 1, m_vertexCapacity, doubledIndexCount, vertexCount, 1);
@@ -362,35 +356,52 @@ void BeamMesh::FlushWindow()
 {
 	LegoU32 vertexCount = m_vertexCursor - m_runStartVertex;
 	LegoU32 triangleCount = m_indexCursor - m_runStartIndex;
-	GolModelBase* model = m_model;
 
-	if (vertexCount != 0 || triangleCount != 0) {
+	if (triangleCount != 0 || vertexCount != 0) {
 		if (!(m_flags & c_flagSectionAttached)) {
-			LegoU32 groupIndex = m_groupCursor++;
+			LegoU32 sectionIndex = m_sectionIndex;
+			LegoU32 groupIndex = m_groupCursor;
+			m_groupCursor = groupIndex + 1;
+
+			GolModelBase* model = m_model;
 			model->GetMutableGroups()[groupIndex] = c_groupAttachSection;
-			model->GetMutableGroups()[groupIndex] |= m_sectionIndex & 0x00ffffff;
+			model->GetMutableGroups()[groupIndex] |= sectionIndex & 0x00ffffff;
 			model->SetDirty(TRUE);
 			m_flags |= c_flagSectionAttached;
 		}
 
-		LegoU32 groupIndex = m_groupCursor++;
+		LegoU32 groupIndex = m_groupCursor;
+		LegoU32 runStartVertex = m_runStartVertex;
+		LegoS32 windowBaseVertex = m_windowBaseVertex;
+		m_groupCursor = groupIndex + 1;
+
+		GolModelBase* model = m_model;
 		model->GetMutableGroups()[groupIndex] = 0;
-		model->GetMutableGroups()[groupIndex] |= (m_windowBaseVertex & 0x3f) << 22;
-		model->GetMutableGroups()[groupIndex] |= ((vertexCount - 1) << 16) & 0x003f0000;
-		model->GetMutableGroups()[groupIndex] |= m_runStartVertex & 0xffff;
+		model->GetMutableGroups()[groupIndex] |= (windowBaseVertex & 0x3f) << 22;
+		model->GetMutableGroups()[groupIndex] |= ((vertexCount + 0xffff) << 16) & 0x003f0000;
+		model->GetMutableGroups()[groupIndex] |= runStartVertex & 0xffff;
 		model->SetDirty(TRUE);
 
-		groupIndex = m_groupCursor++;
+		groupIndex = m_groupCursor;
+		LegoU32 runStartIndex = m_runStartIndex;
+		m_groupCursor = groupIndex + 1;
+
+		model = m_model;
 		model->GetMutableGroups()[groupIndex] = c_groupTriangleRun;
 		model->GetMutableGroups()[groupIndex] |= (triangleCount & 0x7f) << 16;
-		model->GetMutableGroups()[groupIndex] |= m_runStartIndex & 0xffff;
+		model->GetMutableGroups()[groupIndex] |= runStartIndex & 0xffff;
 		model->SetDirty(TRUE);
 	}
 
-	LegoU32 groupIndex = m_groupCursor++;
+	LegoU32 groupIndex = m_groupCursor;
+	LegoU32 ringVertexCount = m_ringVertexCount;
+	LegoU32 ringStartVertex = m_vertexCursor - ringVertexCount;
+	m_groupCursor = groupIndex + 1;
+
+	GolModelBase* model = m_model;
 	model->GetMutableGroups()[groupIndex] = 0;
-	model->GetMutableGroups()[groupIndex] |= ((m_ringVertexCount - 1) << 16) & 0x003f0000;
-	model->GetMutableGroups()[groupIndex] |= (m_vertexCursor - m_ringVertexCount) & 0xffff;
+	model->GetMutableGroups()[groupIndex] |= ((ringVertexCount + 0xffff) << 16) & 0x003f0000;
+	model->GetMutableGroups()[groupIndex] |= ringStartVertex & 0xffff;
 	model->SetDirty(TRUE);
 
 	m_ringVertexIndex = m_ringVertexCount;
@@ -406,30 +417,43 @@ void BeamMesh::FlushRuns()
 	LegoU32 vertexCount = m_vertexCursor - m_runStartVertex;
 	LegoU32 triangleCount = m_indexCursor - m_runStartIndex;
 
-	if (vertexCount == 0 && triangleCount == 0) {
+	if (triangleCount == 0 && vertexCount == 0) {
 		return;
 	}
 
 	if (!(m_flags & c_flagSectionAttached)) {
-		LegoU32 groupIndex = m_groupCursor++;
-		m_model->GetMutableGroups()[groupIndex] = c_groupAttachSection;
-		m_model->GetMutableGroups()[groupIndex] |= m_sectionIndex & 0x00ffffff;
-		m_model->SetDirty(TRUE);
+		LegoU32 sectionIndex = m_sectionIndex;
+		LegoU32 groupIndex = m_groupCursor;
+		m_groupCursor = groupIndex + 1;
+
+		GolModelBase* model = m_model;
+		model->GetMutableGroups()[groupIndex] = c_groupAttachSection;
+		model->GetMutableGroups()[groupIndex] |= sectionIndex & 0x00ffffff;
+		model->SetDirty(TRUE);
 		m_flags |= c_flagSectionAttached;
 	}
 
-	LegoU32 groupIndex = m_groupCursor++;
-	m_model->GetMutableGroups()[groupIndex] = 0;
-	m_model->GetMutableGroups()[groupIndex] |= (m_windowBaseVertex & 0x3f) << 22;
-	m_model->GetMutableGroups()[groupIndex] |= ((vertexCount - 1) << 16) & 0x003f0000;
-	m_model->GetMutableGroups()[groupIndex] |= m_runStartVertex & 0xffff;
-	m_model->SetDirty(TRUE);
+	LegoU32 groupIndex = m_groupCursor;
+	LegoU32 runStartVertex = m_runStartVertex;
+	LegoS32 windowBaseVertex = m_windowBaseVertex;
+	m_groupCursor = groupIndex + 1;
 
-	groupIndex = m_groupCursor++;
-	m_model->GetMutableGroups()[groupIndex] = c_groupTriangleRun;
-	m_model->GetMutableGroups()[groupIndex] |= (triangleCount & 0x7f) << 16;
-	m_model->GetMutableGroups()[groupIndex] |= m_runStartIndex & 0xffff;
-	m_model->SetDirty(TRUE);
+	GolModelBase* model = m_model;
+	model->GetMutableGroups()[groupIndex] = 0;
+	model->GetMutableGroups()[groupIndex] |= (windowBaseVertex & 0x3f) << 22;
+	model->GetMutableGroups()[groupIndex] |= ((vertexCount + 0xffff) << 16) & 0x003f0000;
+	model->GetMutableGroups()[groupIndex] |= runStartVertex & 0xffff;
+	model->SetDirty(TRUE);
+
+	groupIndex = m_groupCursor;
+	LegoU32 runStartIndex = m_runStartIndex;
+	m_groupCursor = groupIndex + 1;
+
+	model = m_model;
+	model->GetMutableGroups()[groupIndex] = c_groupTriangleRun;
+	model->GetMutableGroups()[groupIndex] |= (triangleCount & 0x7f) << 16;
+	model->GetMutableGroups()[groupIndex] |= runStartIndex & 0xffff;
+	model->SetDirty(TRUE);
 
 	m_windowBaseVertex += vertexCount;
 	m_runStartVertex = m_vertexCursor;
@@ -646,7 +670,8 @@ void BeamEntity::Draw(GolRenderDevice& p_renderer)
 {
 	if (m_faceCamera != 0) {
 		GolVec3 cameraRight;
-		p_renderer.GetCurrentCamera()->GetTransform()->GetRight(&cameraRight);
+		GolCamera* camera = p_renderer.GetCurrentCamera();
+		camera->m_transform->GetRight(&cameraRight);
 		cameraRight.m_x = -cameraRight.m_x;
 		cameraRight.m_y = -cameraRight.m_y;
 		cameraRight.m_z = -cameraRight.m_z;

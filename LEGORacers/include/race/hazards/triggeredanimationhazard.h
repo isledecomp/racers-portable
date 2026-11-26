@@ -41,9 +41,9 @@ private:
 		c_modelDistanceCount = 3,
 	};
 
-	GolAnimatedEntity* m_entities[c_entityCount]; // 0x10
-	ColliderRecord* m_collider;                   // 0x20
-	GolVec3 m_unk0x24;                            // 0x24
+	GolAnimatedEntity* m_entities[c_entityCount];     // 0x10
+	ColliderRecord* m_collider;                       // 0x20
+	LegoFloat m_modelDistances[c_modelDistanceCount]; // 0x24
 };
 
 #endif // TRIGGEREDANIMATIONHAZARD_H

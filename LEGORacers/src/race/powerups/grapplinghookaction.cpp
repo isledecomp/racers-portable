@@ -14,6 +14,9 @@
 #include <float.h>
 #include <math.h>
 
+// GLOBAL: LEGORACERS 0x004b14cc
+const LegoFloat g_unk0x004b14cc = 5.0f;
+
 // GLOBAL: LEGORACERS 0x004b14dc
 extern const LegoFloat g_hookBillboardDrawDistance = FLT_MAX;
 
@@ -58,6 +61,11 @@ ColorRGBA g_hookRopeSecondaryColor = {0x8f, 0x5a, 0x1c, 0xff};
 
 // GLOBAL: LEGORACERS 0x004c1c58
 ColorRGBA g_hookRopeTertiaryColor = {0x14, 0x14, 0x00, 0xff};
+
+inline LegoFloat SquaredLength(const GolVec3& p_vector)
+{
+	return GOL_SQUARED(p_vector.m_y) + GOL_SQUARED(p_vector.m_z) + GOL_SQUARED(p_vector.m_x);
+}
 
 // FUNCTION: LEGORACERS 0x00453bf0
 GrapplingHookAction::GrapplingHookAction()
@@ -258,9 +266,7 @@ void GrapplingHookAction::Update(LegoU32 p_elapsedMs)
 			direction.m_y = targetPosition.m_y - position.m_y;
 			direction.m_z = targetPosition.m_z - position.m_z;
 
-			LegoFloat distanceSquared = direction.m_y * direction.m_y;
-			distanceSquared += direction.m_z * direction.m_z;
-			distanceSquared += direction.m_x * direction.m_x;
+			LegoFloat distanceSquared = SquaredLength(direction);
 			if (distanceSquared < g_hookReleaseDistanceSquared) {
 				ReleaseHook(&targetPosition);
 				break;
@@ -278,7 +284,9 @@ void GrapplingHookAction::Update(LegoU32 p_elapsedMs)
 			}
 
 			GolMath::NormalizeVector3(direction, &direction);
-			direction.m_x *= g_hookPullForce;
+			LegoFloat scaledX = g_hookPullForce;
+			scaledX *= direction.m_x;
+			direction.m_x = scaledX;
 			direction.m_y *= g_hookPullForce;
 			direction.m_z *= g_hookPullForce;
 			m_ownerRacer->m_physics.StartExternalForce1(&direction);
@@ -316,14 +324,16 @@ void GrapplingHookAction::Update(LegoU32 p_elapsedMs)
 
 		velocity = m_ownerRacer->m_physics.m_velocity;
 		position.m_z = raisedPositionZ;
+		GolWorldEntity* car = m_ownerRacer->m_physics.m_carEntity;
 		if (m_smokeParticleRef->m_particle != NULL) {
-			m_ownerRacer->m_physics.m_carEntity->CopyOrientation(m_smokeParticleRef->m_particle->GetBasis());
+			car->CopyOrientation(m_smokeParticleRef->m_particle->GetBasis());
 		}
 		if (m_smokeParticleRef->m_particle != NULL) {
 			m_smokeParticleRef->m_particle->SetPosition(&position);
 		}
-		if (m_smokeParticleRef->m_particle != NULL) {
-			m_smokeParticleRef->m_particle->SetVelocity(&velocity);
+		CutsceneParticleRef* smokeRef = m_smokeParticleRef;
+		if (smokeRef->m_particle != NULL) {
+			smokeRef->m_particle->SetVelocity(&velocity);
 		}
 	}
 }
@@ -400,11 +410,11 @@ void GrapplingHookAction::AdvanceState()
 			targetPosition.m_z = m_targetPoint->m_position.m_z;
 		}
 		else {
-			scaledDirection.m_x = direction.m_x * 500.0f;
+			scaledDirection.m_x = ((direction.m_x * 500.0f));
 			scaledDirection.m_y = direction.m_y * 500.0f;
 			scaledDirection.m_z = direction.m_z * 500.0f;
 			GolCameraBase::Add(&position, &scaledDirection, &targetPosition);
-			targetPosition.m_z = 5.0f + targetPosition.m_z;
+			targetPosition.m_z = g_unk0x004b14cc + targetPosition.m_z;
 		}
 
 		targetVelocity.m_x = 0.0f;

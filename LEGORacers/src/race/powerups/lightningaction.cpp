@@ -19,11 +19,6 @@ extern const LegoFloat g_lightningRange;
 // GLOBAL: LEGORACERS 0x004c7600
 LegoFloat g_lightningReach = g_lightningRange * 4.0f;
 
-extern const LegoFloat g_carBuildModelTextureCoordinateScale;
-
-// GLOBAL: LEGORACERS 0x004b02fc
-extern const LegoFloat g_unk0x004b02fc = 0.002f;
-
 // GLOBAL: LEGORACERS 0x004b1544
 const LegoFloat g_lightningSourceHeightOffset = 3.0f;
 
@@ -344,8 +339,8 @@ void LightningAction::UpdateSound(LegoU32 p_elapsedMs)
 		switch (m_state) {
 		case c_stateRampIn:
 			m_sound->SetFrequencyScale(
-				1.0f - static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * g_unk0x004b02fc *
-						   g_lightningFrequencyRampScale
+				1.0f -
+				static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * 0.002f * g_lightningFrequencyRampScale
 			);
 			break;
 		case c_stateSustain:
@@ -353,8 +348,8 @@ void LightningAction::UpdateSound(LegoU32 p_elapsedMs)
 			break;
 		case c_stateFade:
 			m_sound->SetFrequencyScale(
-				1.0f - static_cast<LegoFloat>(static_cast<LegoS32>(c_fadeDurationMs - m_stateTimerMs)) *
-						   g_unk0x004b02fc * g_lightningFrequencyRampScale
+				1.0f - static_cast<LegoFloat>(static_cast<LegoS32>(c_fadeDurationMs - m_stateTimerMs)) * 0.002f *
+						   g_lightningFrequencyRampScale
 			);
 			break;
 		}
@@ -454,10 +449,10 @@ void LightningAction::UpdateBoltPath()
 	GolVec3 direction = m_source->m_forward;
 	if (m_state == c_stateRampIn) {
 		m_boltLength =
-			(1.0f - static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * g_unk0x004b02fc) * g_lightningRange;
+			(1.0f - static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * 0.002f) * g_lightningRange;
 	}
 	else if (m_state == c_stateFade) {
-		LegoFloat amount = static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * g_unk0x004b02fc;
+		LegoFloat amount = static_cast<LegoFloat>(static_cast<LegoS32>(m_stateTimerMs)) * 0.002f;
 		m_boltLength = amount * g_lightningRange;
 	}
 	else {
@@ -485,7 +480,7 @@ void LightningAction::UpdateBoltPath()
 			direction.m_z = end.m_z - position.m_z;
 			GolMath::NormalizeVector3(direction, &direction);
 
-			distance = static_cast<LegoFloat>(::sqrt(GOLVECTOR3_DISTANCE_SQUARED(position, end)));
+			distance = sqrtf(end.DistanceSquaredTo(position));
 			LegoFloat radius = m_targetRacer->m_visuals.m_entityGroup.GetBoundsRadius();
 			if (distance > radius) {
 				distance -= radius;
@@ -496,15 +491,20 @@ void LightningAction::UpdateBoltPath()
 				break;
 			}
 
-			distance = static_cast<LegoFloat>(::sqrt(GOLVECTOR3_DISTANCE_SQUARED(position, hit)));
+			distance = static_cast<LegoFloat>(::sqrt(hit.DistanceSquaredTo(position)));
 		}
 
-		m_boltLength = distance * g_carBuildModelTextureCoordinateScale;
+		m_boltLength = distance * 0.25f;
 	} while (FALSE);
 
-	direction *= m_boltLength;
+	scale = m_boltLength;
+	direction *= scale;
 	for (LegoS32 i = 0; i < sizeOfArray(m_boltPoints); i++) {
-		position += direction;
+		LegoFloat x = direction.m_x;
+		x += position.m_x;
+		position.m_x = x;
+		position.m_y += direction.m_y;
+		position.m_z += direction.m_z;
 		m_boltPoints[i] = position;
 	}
 }
@@ -589,20 +589,21 @@ void LightningAction::OnHitRacer(Racer* p_racer)
 			impulse.m_z = direction.m_z;
 			impulse.m_z *= g_lightningImpulseScale;
 
-			direction.Clear();
-			direction.m_z = g_lightningLaunchImpulse;
+			GolVec3 up;
+			up.m_x = 0.0f;
+			up.m_y = 0.0f;
+			up.m_z = 1.0f;
 
-			LegoFloat impulseX = direction.m_x;
-			impulseX += impulse.m_x;
-			impulse.m_x = impulseX;
+			GolVec3 launch;
+			launch.m_x = up.m_x * g_lightningLaunchImpulse;
+			launch.m_y = up.m_y * g_lightningLaunchImpulse;
+			LegoFloat launchZ = g_lightningLaunchImpulse;
+			launch.m_z = launchZ;
+			direction = launch;
 
-			LegoFloat impulseY = direction.m_y;
-			impulseY += impulse.m_y;
-			impulse.m_y = impulseY;
-
-			LegoFloat impulseZ = direction.m_z;
-			impulseZ += impulse.m_z;
-			impulse.m_z = impulseZ;
+			impulse.m_x = direction.m_x + impulse.m_x;
+			impulse.m_y = direction.m_y + impulse.m_y;
+			impulse.m_z = direction.m_z + impulse.m_z;
 
 			physics->ApplyImpulse(&impulse, &impulse);
 

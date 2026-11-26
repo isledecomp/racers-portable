@@ -34,8 +34,6 @@ const LegoFloat g_raceDecalWeldThresholdScale = 0.25f;
 // GLOBAL: LEGORACERS 0x004b4784
 const LegoFloat g_raceDecalMinSampleDistance = 0.1f;
 
-extern LegoFloat g_inv255;
-
 // FUNCTION: LEGORACERS 0x004513d0 FOLDED
 void RaceDecalManager::Trail::DrawOpaque(GolD3DRenderDevice*)
 {
@@ -86,9 +84,9 @@ void RaceDecalManager::Trail::Reset()
 	m_slotIndex = 0;
 	m_flags = 0;
 	m_width = 0;
-	m_anchorX = 0;
-	m_anchorY = 0;
-	m_anchorZ = 0;
+	m_anchor.m_x = 0;
+	m_anchor.m_y = 0;
+	m_anchor.m_z = 0;
 	m_lastX = 0;
 	m_lastY = 0;
 	m_lastZ = 0;
@@ -109,18 +107,18 @@ void RaceDecalManager::Trail::Initialize(
 	GolCollidableEntity* p_params
 )
 {
-	m_collidable = p_params;
 	m_golExport = p_golExport;
+	m_collidable = p_params;
 
 	m_decal.Initialize(p_golExport, p_renderer, 12);
 	m_decal.GetEntity().EnableFlagBit1();
-	m_decal.m_depth = g_raceDecalDefaultDepth;
+	LegoFloat depth = g_raceDecalDefaultDepth;
+	m_decal.m_depth = depth;
 
-	ModelSlot* slot = m_slots;
-	LegoU32 count = sizeOfArray(m_slots);
-	do {
-		slot->m_model = m_golExport->CreateModel();
-		slot->m_model->Allocate(
+	for (LegoU32 i = 0; i < sizeOfArray(m_slots); i++) {
+		GolModelBase* model = m_golExport->CreateModel();
+		m_slots[i].m_model = model;
+		model->Allocate(
 			p_renderer,
 			1,
 			m_decal.m_vertexCapacity,
@@ -128,11 +126,9 @@ void RaceDecalManager::Trail::Initialize(
 			m_decal.m_triangleCapacity * 2 + 2,
 			1
 		);
-		slot->m_entry.m_entity.SetPrimaryModel(slot->m_model, g_raceDecalMaxFloat);
-		slot->m_entry.EnableFlagBit1();
-		slot++;
-		count--;
-	} while (count);
+		m_slots[i].m_entry.m_entity.SetPrimaryModel(m_slots[i].m_model, g_raceDecalMaxFloat);
+		m_slots[i].m_entry.EnableFlagBit1();
+	}
 }
 
 // FUNCTION: LEGORACERS 0x00491d20
@@ -146,7 +142,7 @@ void RaceDecalManager::Trail::SetMaterialTable(MaterialTable* p_materialTable)
 
 	GolMaterial* material = static_cast<GolMaterial*>(p_materialTable->GetEntry(0));
 	if (material->GetFlags() & GolMaterial::c_flagTransparent) {
-		m_alphaScale = static_cast<LegoFloat>(material->GetDestBlend()) * g_inv255;
+		m_alphaScale = static_cast<LegoFloat>(material->GetDestBlend()) * 0.003921569f;
 	}
 	else {
 		m_alphaScale = 1.0f;
@@ -242,20 +238,17 @@ void RaceDecalManager::Trail::Update(LegoU32 p_elapsedMs)
 			m_decal.GetEntity().GetPosition(&position);
 			m_slots[m_slotIndex].m_entry.m_entity.SetPosition(position);
 
-			LegoU32 index = m_slotIndex;
-			LegoU32 zero = 0;
-			index++;
-			m_slotIndex = index;
-			if (index == sizeOfArray(m_slots)) {
-				m_slotIndex = zero;
+			m_slotIndex++;
+			if (m_slotIndex == sizeOfArray(m_slots)) {
+				m_slotIndex = 0;
 				m_flags |= c_slotsWrapped;
 			}
 
-			m_anchorY = m_lastY;
-			m_anchorZ = m_lastZ;
-			m_elapsedMs = zero;
+			m_elapsedMs = 0;
+			m_anchor.m_x = m_lastX;
+			m_anchor.m_y = m_lastY;
+			m_anchor.m_z = m_lastZ;
 			m_flags &= ~c_liveSegment;
-			m_anchorX = m_lastX;
 		}
 	}
 
@@ -271,52 +264,46 @@ void RaceDecalManager::Trail::AddSample(LegoU32 p_elapsedMs, GolVec3 p_position)
 
 	LegoU8 flags = m_flags;
 	if (flags & c_firstSample) {
-		m_anchorX = p_position.m_x;
-		m_anchorY = p_position.m_y;
-		m_anchorZ = p_position.m_z;
+		m_anchor.m_x = p_position.m_x;
+		m_anchor.m_y = p_position.m_y;
+		m_anchor.m_z = p_position.m_z;
 		m_flags = flags & ~c_firstSample;
 		return;
 	}
 
 	m_elapsedMs += p_elapsedMs;
 
-	LegoFloat distance = static_cast<LegoFloat>(sqrt(
-		(p_position.m_z - m_anchorZ) * (p_position.m_z - m_anchorZ) +
-		(p_position.m_y - m_anchorY) * (p_position.m_y - m_anchorY) +
-		(p_position.m_x - m_anchorX) * (p_position.m_x - m_anchorX)
-	));
+	LegoFloat distance = static_cast<LegoFloat>(sqrt(m_anchor.DistanceSquaredTo(p_position)));
 	if (distance < g_raceDecalMinSampleDistance) {
 		return;
 	}
 
 	GolVec3 direction;
-	direction.m_x = (p_position.m_x - m_anchorX) / distance;
-	direction.m_y = (p_position.m_y - m_anchorY) / distance;
-	direction.m_z = (p_position.m_z - m_anchorZ) / distance;
+	direction.m_x = p_position.m_x - m_anchor.m_x;
+	direction.m_y = p_position.m_y - m_anchor.m_y;
+	direction.m_z = p_position.m_z - m_anchor.m_z;
 
 	GolVec3 up;
 	up.m_x = 0.0f;
 	up.m_y = 0.0f;
 	up.m_z = -1.0f;
 
-	LegoFloat centerX = (p_position.m_x + m_anchorX) * 0.5f;
-	LegoFloat centerY = (p_position.m_y + m_anchorY) * 0.5f;
-	LegoFloat centerZ = (p_position.m_z + m_anchorZ) * 0.5f;
+	direction.m_x /= distance;
+	direction.m_y /= distance;
+	direction.m_z /= distance;
 
-	p_position.m_x = 0.0f;
-	p_position.m_y = 0.0f;
-	p_position.m_z = -1.0f * g_raceDecalTrailOffsetZ;
-	centerX -= p_position.m_x;
-	centerY -= p_position.m_y;
-	centerZ -= p_position.m_z;
+	GolVec3 center;
+	center.m_x = (p_position.m_x + m_anchor.m_x) * 0.5f;
+	center.m_y = (p_position.m_y + m_anchor.m_y) * 0.5f;
+	center.m_z = (p_position.m_z + m_anchor.m_z) * 0.5f;
 
-	Decal* field = &m_decal;
-	field->m_width = m_width;
-	field->m_length = distance;
-	field->m_center.m_x = centerX;
-	field->m_center.m_y = centerY;
-	field->m_center.m_z = centerZ;
-	field->SetOrientation(&up, &direction);
+	p_position = up * g_raceDecalTrailOffsetZ;
+	center -= p_position;
+
+	m_decal.SetWidth(m_width);
+	m_decal.SetLength(distance);
+	m_decal.SetCenter(center);
+	m_decal.SetOrientation(&up, &direction);
 	m_flags |= c_samplePending;
 }
 
@@ -334,15 +321,15 @@ void RaceDecalManager::Trail::DrawTransparent(GolD3DRenderDevice* p_renderer)
 		}
 
 		LegoU32 count;
-		count = (m_flags & c_slotsWrapped) ? sizeOfArray(m_slots) : m_slotIndex;
+		if (!(m_flags & c_slotsWrapped)) {
+			count = m_slotIndex;
+		}
+		else {
+			count = sizeOfArray(m_slots);
+		}
 
-		if (count) {
-			ModelSlot* slot = m_slots;
-			do {
-				p_renderer->DrawModelEntity(&slot->m_entry.m_entity);
-				slot++;
-				count--;
-			} while (count);
+		for (ModelSlot* slot = m_slots; count > 0; slot++, count--) {
+			p_renderer->DrawModelEntity(&slot->m_entry.m_entity);
 		}
 
 		if (m_alpha < 0xff) {

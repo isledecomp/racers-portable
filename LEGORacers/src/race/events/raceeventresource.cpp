@@ -48,9 +48,11 @@ RaceEventResource::~RaceEventResource()
 void RaceEventResource::Reset()
 {
 	m_eventTable = NULL;
-	m_stateEventIds[0] = -1;
-	m_stateEventIds[1] = -1;
-	m_stateEventIds[2] = -1;
+
+	for (LegoS32 i = 0; i < sizeOfArray(m_stateEventIds); i++) {
+		m_stateEventIds[i] = -1;
+	}
+
 	m_state = 0;
 	m_eventId = 0;
 }

@@ -501,51 +501,56 @@ void GolRenderDevice::SelectTextureFormat(
 	LegoBool32
 )
 {
-	LegoU32 i;
-	LegoU32 alpBitCount;
-	LegoU32 redBitCount;
-	LegoU32 grnBitCount;
-	LegoU32 bluBitCount;
+	struct ChannelBitCounts {
+		LegoU32 m_intensity; // 0x00
+		LegoU32 m_alpha;     // 0x04
+		LegoU32 m_red;       // 0x08
+		LegoU32 m_green;     // 0x0c
+		LegoU32 m_blue;      // 0x10
+		LegoU32 m_palette;   // 0x14
+	} bits;
 
-	redBitCount = p_requestedTextureFormat.GetRedBitCount();
-	grnBitCount = p_requestedTextureFormat.GetGreenBitCount();
-	bluBitCount = p_requestedTextureFormat.GetBlueBitCount();
-	alpBitCount = p_requestedTextureFormat.GetAlphaBitCount();
-	LegoU32 intensityBitCount = p_requestedTextureFormat.GetIntensityBitCount();
-	LegoU32 paletteBitCount = p_requestedTextureFormat.GetPaletteBitCount();
+	LegoU32 i;
+
+	bits.m_red = p_requestedTextureFormat.GetRedBitCount();
+	bits.m_green = p_requestedTextureFormat.GetGreenBitCount();
+	bits.m_blue = p_requestedTextureFormat.GetBlueBitCount();
+	bits.m_alpha = p_requestedTextureFormat.GetAlphaBitCount();
+	bits.m_intensity = p_requestedTextureFormat.GetIntensityBitCount();
+	bits.m_palette = p_requestedTextureFormat.GetPaletteBitCount();
 	LegoU32 bpp = p_requestedTextureFormat.m_bitsPerPixel;
 
-	if (m_requestedRedBitCount == redBitCount && m_requestedGrnBitCount == grnBitCount &&
-		m_requestedBluBitCount == bluBitCount && m_requestedAlpBitCount == alpBitCount &&
-		m_requestedIntensityBitCount == intensityBitCount && m_requestedPaletteBitCount == paletteBitCount) {
+	if (m_requestedRedBitCount == bits.m_red && m_requestedGrnBitCount == bits.m_green &&
+		m_requestedBluBitCount == bits.m_blue && m_requestedAlpBitCount == bits.m_alpha &&
+		m_requestedIntensityBitCount == bits.m_intensity && m_requestedPaletteBitCount == bits.m_palette) {
 		*p_actualTextureFormat = m_textureFormats[m_textureFormatIndex];
 		return;
 	}
 
-	m_requestedRedBitCount = redBitCount;
-	m_requestedGrnBitCount = grnBitCount;
-	m_requestedBluBitCount = bluBitCount;
-	m_requestedAlpBitCount = alpBitCount;
-	m_requestedIntensityBitCount = intensityBitCount;
-	m_requestedPaletteBitCount = paletteBitCount;
+	m_requestedRedBitCount = bits.m_red;
+	m_requestedGrnBitCount = bits.m_green;
+	m_requestedBluBitCount = bits.m_blue;
+	m_requestedAlpBitCount = bits.m_alpha;
+	m_requestedIntensityBitCount = bits.m_intensity;
+	m_requestedPaletteBitCount = bits.m_palette;
 
-	if (alpBitCount != 0) {
-		if (paletteBitCount != 0) {
+	if (bits.m_alpha != 0) {
+		if (bits.m_palette != 0) {
 			for (i = 0; i < m_countTextureFormats; i++) {
 				if (m_textureFormats[i].m_bitsPerPixel == bpp &&
-					m_textureFormats[i].GetPaletteBitCount() == paletteBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() == alpBitCount) {
+					m_textureFormats[i].GetPaletteBitCount() == bits.m_palette &&
+					m_textureFormats[i].GetAlphaBitCount() == bits.m_alpha) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
 				}
 			}
 		}
-		else if (intensityBitCount != 0) {
+		else if (bits.m_intensity != 0) {
 			for (i = 0; i < m_countTextureFormats; i++) {
 				if (m_textureFormats[i].m_bitsPerPixel == bpp &&
-					m_textureFormats[i].GetIntensityBitCount() == intensityBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() == alpBitCount) {
+					m_textureFormats[i].GetIntensityBitCount() == bits.m_intensity &&
+					m_textureFormats[i].GetAlphaBitCount() == bits.m_alpha) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
@@ -554,147 +559,32 @@ void GolRenderDevice::SelectTextureFormat(
 		}
 		else {
 			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel == bpp && m_textureFormats[i].GetRedBitCount() == redBitCount &&
-					m_textureFormats[i].GetGreenBitCount() == grnBitCount &&
-					m_textureFormats[i].GetBlueBitCount() == bluBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() == alpBitCount) {
+				if (m_textureFormats[i].m_bitsPerPixel == bpp && m_textureFormats[i].GetRedBitCount() == bits.m_red &&
+					m_textureFormats[i].GetGreenBitCount() == bits.m_green &&
+					m_textureFormats[i].GetBlueBitCount() == bits.m_blue &&
+					m_textureFormats[i].GetAlphaBitCount() == bits.m_alpha) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
 				}
-			}
-		}
-
-		if (paletteBitCount != 0) {
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
-					m_textureFormats[i].GetPaletteBitCount() >= paletteBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() >= alpBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel >= 16 && m_textureFormats[i].GetRedBitCount() >= 5 &&
-					m_textureFormats[i].GetGreenBitCount() >= 5 && m_textureFormats[i].GetBlueBitCount() >= 5 &&
-					m_textureFormats[i].GetAlphaBitCount() >= alpBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-		}
-		else if (intensityBitCount != 0) {
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
-					m_textureFormats[i].GetIntensityBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() >= alpBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
-					m_textureFormats[i].GetRedBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetGreenBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetBlueBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() >= alpBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-		}
-		else {
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp && m_textureFormats[i].GetRedBitCount() >= redBitCount &&
-					m_textureFormats[i].GetGreenBitCount() >= grnBitCount &&
-					m_textureFormats[i].GetBlueBitCount() >= bluBitCount &&
-					m_textureFormats[i].GetAlphaBitCount() >= alpBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-		}
-
-		if (alpBitCount >= 4) {
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].GetAlphaBitCount() >= 4) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-		}
-
-		for (i = 0; i < m_countTextureFormats; i++) {
-			if (m_textureFormats[i].GetAlphaBitCount() != 0) {
-				*p_actualTextureFormat = m_textureFormats[i];
-				m_textureFormatIndex = i;
-				return;
 			}
 		}
 	}
 	else {
-		if (paletteBitCount != 0) {
+		if (bits.m_palette != 0) {
 			for (i = 0; i < m_countTextureFormats; i++) {
 				if (m_textureFormats[i].m_bitsPerPixel == bpp &&
-					m_textureFormats[i].GetPaletteBitCount() == paletteBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-
-			if (paletteBitCount < 8) {
-				for (i = 0; i < m_countTextureFormats; i++) {
-					if (m_textureFormats[i].m_bitsPerPixel < 16 &&
-						m_textureFormats[i].GetPaletteBitCount() >= paletteBitCount) {
-						*p_actualTextureFormat = m_textureFormats[i];
-						m_textureFormatIndex = i;
-						return;
-					}
-				}
-			}
-
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel == 16 && m_textureFormats[i].GetRedBitCount() >= 5 &&
-					m_textureFormats[i].GetGreenBitCount() >= 5 && m_textureFormats[i].GetBlueBitCount() >= 5) {
+					m_textureFormats[i].GetPaletteBitCount() == bits.m_palette) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
 				}
 			}
 		}
-		else if (intensityBitCount != 0) {
+		else if (bits.m_intensity != 0) {
 			for (i = 0; i < m_countTextureFormats; i++) {
 				if (m_textureFormats[i].m_bitsPerPixel == bpp &&
-					m_textureFormats[i].GetIntensityBitCount() == intensityBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
-					m_textureFormats[i].GetIntensityBitCount() >= intensityBitCount) {
-					*p_actualTextureFormat = m_textureFormats[i];
-					m_textureFormatIndex = i;
-					return;
-				}
-			}
-
-			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
-					m_textureFormats[i].GetRedBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetGreenBitCount() >= intensityBitCount &&
-					m_textureFormats[i].GetBlueBitCount() >= intensityBitCount) {
+					m_textureFormats[i].GetIntensityBitCount() == bits.m_intensity) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
@@ -714,9 +604,23 @@ void GolRenderDevice::SelectTextureFormat(
 			}
 
 			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel == bpp && m_textureFormats[i].GetRedBitCount() == redBitCount &&
-					m_textureFormats[i].GetGreenBitCount() == grnBitCount &&
-					m_textureFormats[i].GetBlueBitCount() == bluBitCount) {
+				if (m_textureFormats[i].m_bitsPerPixel == bpp && m_textureFormats[i].GetRedBitCount() == bits.m_red &&
+					m_textureFormats[i].GetGreenBitCount() == bits.m_green &&
+					m_textureFormats[i].GetBlueBitCount() == bits.m_blue) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+	}
+
+	if (bits.m_alpha != 0) {
+		if (bits.m_palette != 0) {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
+					m_textureFormats[i].GetPaletteBitCount() >= bits.m_palette &&
+					m_textureFormats[i].GetAlphaBitCount() >= bits.m_alpha) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
@@ -724,9 +628,113 @@ void GolRenderDevice::SelectTextureFormat(
 			}
 
 			for (i = 0; i < m_countTextureFormats; i++) {
-				if (m_textureFormats[i].m_bitsPerPixel > bpp && m_textureFormats[i].GetRedBitCount() >= redBitCount &&
-					m_textureFormats[i].GetGreenBitCount() >= grnBitCount &&
-					m_textureFormats[i].GetBlueBitCount() >= bluBitCount) {
+				if (m_textureFormats[i].m_bitsPerPixel >= 16 && m_textureFormats[i].GetRedBitCount() >= 5 &&
+					m_textureFormats[i].GetGreenBitCount() >= 5 && m_textureFormats[i].GetBlueBitCount() >= 5 &&
+					m_textureFormats[i].GetAlphaBitCount() >= bits.m_alpha) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+		else if (bits.m_intensity != 0) {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
+					m_textureFormats[i].GetIntensityBitCount() >= bits.m_intensity &&
+					m_textureFormats[i].GetAlphaBitCount() >= bits.m_alpha) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp) {
+					LegoU32 intensity = bits.m_intensity;
+					if (m_textureFormats[i].GetRedBitCount() >= intensity &&
+						m_textureFormats[i].GetGreenBitCount() >= intensity &&
+						m_textureFormats[i].GetBlueBitCount() >= intensity &&
+						m_textureFormats[i].GetAlphaBitCount() >= bits.m_alpha) {
+						*p_actualTextureFormat = m_textureFormats[i];
+						m_textureFormatIndex = i;
+						return;
+					}
+				}
+			}
+		}
+		else {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp && m_textureFormats[i].GetRedBitCount() >= bits.m_red &&
+					m_textureFormats[i].GetGreenBitCount() >= bits.m_green &&
+					m_textureFormats[i].GetBlueBitCount() >= bits.m_blue &&
+					m_textureFormats[i].GetAlphaBitCount() >= bits.m_alpha) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+	}
+	else {
+		if (bits.m_palette != 0) {
+			if (bits.m_palette < 8) {
+				for (i = 0; i < m_countTextureFormats; i++) {
+					if (m_textureFormats[i].m_bitsPerPixel < 16 &&
+						m_textureFormats[i].GetPaletteBitCount() >= bits.m_palette) {
+						*p_actualTextureFormat = m_textureFormats[i];
+						m_textureFormatIndex = i;
+						return;
+					}
+				}
+			}
+
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel == 16 && m_textureFormats[i].GetRedBitCount() >= 5 &&
+					m_textureFormats[i].GetGreenBitCount() >= 5 && m_textureFormats[i].GetBlueBitCount() >= 5) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+		else if (bits.m_intensity != 0) {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
+					m_textureFormats[i].GetIntensityBitCount() >= bits.m_intensity) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp &&
+					m_textureFormats[i].GetRedBitCount() >= bits.m_intensity &&
+					m_textureFormats[i].GetGreenBitCount() >= bits.m_intensity &&
+					m_textureFormats[i].GetBlueBitCount() >= bits.m_intensity) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+		else {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].m_bitsPerPixel > bpp && m_textureFormats[i].GetRedBitCount() >= bits.m_red &&
+					m_textureFormats[i].GetGreenBitCount() >= bits.m_green &&
+					m_textureFormats[i].GetBlueBitCount() >= bits.m_blue) {
+					*p_actualTextureFormat = m_textureFormats[i];
+					m_textureFormatIndex = i;
+					return;
+				}
+			}
+		}
+	}
+
+	if (bits.m_alpha != 0) {
+		if (bits.m_alpha >= 4) {
+			for (i = 0; i < m_countTextureFormats; i++) {
+				if (m_textureFormats[i].GetAlphaBitCount() >= 4) {
 					*p_actualTextureFormat = m_textureFormats[i];
 					m_textureFormatIndex = i;
 					return;
@@ -734,6 +742,15 @@ void GolRenderDevice::SelectTextureFormat(
 			}
 		}
 
+		for (i = 0; i < m_countTextureFormats; i++) {
+			if (m_textureFormats[i].GetAlphaBitCount() != 0) {
+				*p_actualTextureFormat = m_textureFormats[i];
+				m_textureFormatIndex = i;
+				return;
+			}
+		}
+	}
+	else {
 		for (i = 0; i < m_countTextureFormats; i++) {
 			if (m_textureFormats[i].m_bitsPerPixel >= 15 && m_textureFormats[i].GetRedBitCount() >= 5 &&
 				m_textureFormats[i].GetGreenBitCount() >= 5 && m_textureFormats[i].GetBlueBitCount() >= 5) {
@@ -781,36 +798,41 @@ void GolRenderDevice::DrawModelEntityEnvironmentMapped(GolWorldEntity* p_model)
 
 	GolVec3 localRight;
 	GolVec3 localForward;
+	GolVec3 worldRight;
+	GolVec3 worldForward;
+	GolVec2 uv;
 	GolSceneNode* node = static_cast<GolModelEntity*>(p_model)->GetSceneNode(result.m_lodIndex);
-	if (node != NULL) {
-		GolVec3 worldRight;
-		GolVec3 worldForward;
+	if (node == NULL) {
+		p_model->GetAxes(&localRight, &localForward);
+	}
+	else {
 		static_cast<GolModelEntity*>(p_model)->ApplyPartAnimation(result.m_lodIndex);
 		node->GetTransform(0)->GetRightDirection(&worldRight, &worldForward);
 		p_model->RotateToWorld(worldRight, &localRight);
 		p_model->RotateToWorld(worldForward, &localForward);
 	}
-	else {
-		p_model->GetAxes(&localRight, &localForward);
-	}
 
+	LegoFloat u;
+	LegoFloat v;
 	if (localRight.m_x == 0.0f && localRight.m_y == 0.0f) {
-		DrawModelEntityWithUvOffset(p_model, 0.0f, 0.5f);
+		u = 0.0f;
+		v = 0.5f;
 	}
 	else {
-		GolVec2 uv;
 		uv.m_x = localRight.m_x;
 		uv.m_y = localRight.m_y;
 		GolMath::NormalizeVector2(uv, &uv);
 
-		LegoFloat u = g_arccosTable[static_cast<LegoS32>((uv.m_x + 1.0f) * 511.5f)] * 0.31830987f * 0.5f;
+		u = g_arccosTable[static_cast<LegoS32>((uv.m_x + 1.0f) * 511.5f)] * 0.31830987f;
+		u *= 0.5f;
 		if (uv.m_y < 0.0f) {
 			u = 1.0f - u;
 		}
 
-		LegoFloat v = g_arccosTable[static_cast<LegoS32>((localForward.m_z + 1.0f) * 511.5f)] * 0.31830987f;
-		DrawModelEntityWithUvOffset(p_model, u, v);
+		v = g_arccosTable[static_cast<LegoS32>((localForward.m_z + 1.0f) * 511.5f)] * 0.31830987f;
 	}
+
+	DrawModelEntityWithUvOffset(p_model, u, v);
 }
 
 // FUNCTION: GOLDP 0x10029680

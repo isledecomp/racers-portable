@@ -44,7 +44,7 @@ GolVec3* GolBoundingVolume::BspNode::GetPlaneNormal(GolVec3* p_dest) const
 // FUNCTION: LEGORACERS 0x00404680
 LegoFloat GolCameraBase::Dot(GolVec3* p_left, GolVec3* p_right)
 {
-	return p_left->m_z * p_right->m_z + p_left->m_y * p_right->m_y + p_left->m_x * p_right->m_x;
+	return (p_left->m_z * p_right->m_z) + (p_left->m_y * p_right->m_y) + (p_left->m_x * p_right->m_x);
 }
 
 // FUNCTION: LEGORACERS 0x004046a0
@@ -117,210 +117,195 @@ GolCameraBase::~GolCameraBase()
 void GolCameraBase::ComputeFrustum(GolViewFrustum* p_view)
 {
 	m_transform->GetPosition(&p_view->m_position);
-
 	LegoFloat tangent = static_cast<LegoFloat>(tan(m_fov * 0.0087266462f));
-	m_farHalfHeight = m_farClip * tangent;
-	m_farHalfWidth = m_aspectRatio * m_farHalfHeight;
-
 	GolVec3 source;
+	source.m_z = m_farClip;
+	m_farHalfHeight = ((GOL_MUL(m_farClip, tangent)));
+	m_farHalfWidth = ((GOL_MUL(m_aspectRatio, m_farHalfHeight)));
 	source.m_x = -m_farHalfWidth;
 	source.m_y = -m_farHalfHeight;
-	source.m_z = m_farClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[0]);
-
-	source.m_x = -m_farHalfWidth;
 	source.m_y = m_farHalfHeight;
-	source.m_z = m_farClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[2]);
-
 	source.m_x = m_farHalfWidth;
 	source.m_y = -m_farHalfHeight;
-	source.m_z = m_farClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[1]);
-
-	source.m_x = m_farHalfWidth;
 	source.m_y = m_farHalfHeight;
-	source.m_z = m_farClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[3]);
 
-	m_nearHalfHeight = m_nearClip * tangent;
-	m_nearHalfWidth = m_aspectRatio * m_nearHalfHeight;
-
+	m_nearHalfHeight = GOL_MUL(m_nearClip, tangent);
+	m_nearHalfWidth = GOL_MUL(m_aspectRatio, m_nearHalfHeight);
+	source.m_z = m_nearClip;
 	source.m_x = -m_nearHalfWidth;
 	source.m_y = -m_nearHalfHeight;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[4]);
-
-	source.m_x = -m_nearHalfWidth;
 	source.m_y = m_nearHalfHeight;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[6]);
-
 	source.m_x = m_nearHalfWidth;
 	source.m_y = -m_nearHalfHeight;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[5]);
-
-	source.m_x = m_nearHalfWidth;
 	source.m_y = m_nearHalfHeight;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[7]);
 
 	GolVec3 edge0;
 	GolVec3 edge1;
 	GolVec3 normal;
 
-	edge0 = p_view->m_corners[0] - p_view->m_corners[4];
-	edge1 = p_view->m_corners[6] - p_view->m_corners[4];
-	normal.m_x = edge1.m_y * edge0.m_z - edge1.m_z * edge0.m_y;
-	normal.m_y = edge1.m_z * edge0.m_x - edge1.m_x * edge0.m_z;
-	normal.m_z = edge1.m_x * edge0.m_y - edge1.m_y * edge0.m_x;
+	edge0.m_x = p_view->m_corners[0].m_x - p_view->m_corners[4].m_x;
+	edge0.m_y = p_view->m_corners[0].m_y - p_view->m_corners[4].m_y;
+	edge0.m_z = p_view->m_corners[0].m_z - p_view->m_corners[4].m_z;
+	edge1.m_x = p_view->m_corners[6].m_x - p_view->m_corners[4].m_x;
+	edge1.m_y = p_view->m_corners[6].m_y - p_view->m_corners[4].m_y;
+	edge1.m_z = p_view->m_corners[6].m_z - p_view->m_corners[4].m_z;
+	GolMath::CrossVector3(&edge1, &edge0, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[0].m_normal = normal;
-	p_view->m_planes[0].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[0].m_normal.m_x = normal.m_x;
+	p_view->m_planes[0].m_normal.m_y = normal.m_y;
+	p_view->m_planes[0].m_normal.m_z = normal.m_z;
+	p_view->m_planes[0].m_distance = -Dot(&p_view->m_planes[0].m_normal, &p_view->m_corners[4]);
 
-	edge0 = p_view->m_corners[1] - p_view->m_corners[5];
-	edge1 = p_view->m_corners[7] - p_view->m_corners[5];
-	normal.m_x = edge0.m_y * edge1.m_z - edge0.m_z * edge1.m_y;
-	normal.m_y = edge0.m_z * edge1.m_x - edge0.m_x * edge1.m_z;
-	normal.m_z = edge0.m_x * edge1.m_y - edge0.m_y * edge1.m_x;
+	edge0.m_x = p_view->m_corners[1].m_x - p_view->m_corners[5].m_x;
+	edge0.m_y = p_view->m_corners[1].m_y - p_view->m_corners[5].m_y;
+	edge0.m_z = p_view->m_corners[1].m_z - p_view->m_corners[5].m_z;
+	edge1.m_x = p_view->m_corners[7].m_x - p_view->m_corners[5].m_x;
+	edge1.m_y = p_view->m_corners[7].m_y - p_view->m_corners[5].m_y;
+	edge1.m_z = p_view->m_corners[7].m_z - p_view->m_corners[5].m_z;
+	GolMath::CrossVector3(&edge0, &edge1, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[1].m_normal = normal;
-	p_view->m_planes[1].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[5]);
+	p_view->m_planes[1].SetNormal(normal);
+	p_view->m_planes[1].m_distance = -Dot(&p_view->m_planes[1].m_normal, &p_view->m_corners[5]);
 
-	edge0 = p_view->m_corners[2] - p_view->m_corners[6];
-	edge1 = p_view->m_corners[7] - p_view->m_corners[6];
-	normal.m_x = edge1.m_y * edge0.m_z - edge1.m_z * edge0.m_y;
-	normal.m_y = edge1.m_z * edge0.m_x - edge1.m_x * edge0.m_z;
-	normal.m_z = edge1.m_x * edge0.m_y - edge1.m_y * edge0.m_x;
+	edge0.m_x = p_view->m_corners[2].m_x - p_view->m_corners[6].m_x;
+	edge0.m_y = p_view->m_corners[2].m_y - p_view->m_corners[6].m_y;
+	edge0.m_z = p_view->m_corners[2].m_z - p_view->m_corners[6].m_z;
+	edge1.m_x = p_view->m_corners[7].m_x - p_view->m_corners[6].m_x;
+	edge1.m_y = p_view->m_corners[7].m_y - p_view->m_corners[6].m_y;
+	edge1.m_z = p_view->m_corners[7].m_z - p_view->m_corners[6].m_z;
+	GolMath::CrossVector3(&edge1, &edge0, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[2].m_normal = normal;
-	p_view->m_planes[2].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[6]);
+	p_view->m_planes[2].SetNormal(normal);
+	p_view->m_planes[2].m_distance = -Dot(&p_view->m_planes[2].m_normal, &p_view->m_corners[6]);
 
-	edge0 = p_view->m_corners[0] - p_view->m_corners[4];
-	edge1 = p_view->m_corners[5] - p_view->m_corners[4];
-	normal.m_x = edge0.m_y * edge1.m_z - edge0.m_z * edge1.m_y;
-	normal.m_y = edge0.m_z * edge1.m_x - edge0.m_x * edge1.m_z;
-	normal.m_z = edge0.m_x * edge1.m_y - edge0.m_y * edge1.m_x;
+	edge0.m_x = p_view->m_corners[0].m_x - p_view->m_corners[4].m_x;
+	edge0.m_y = p_view->m_corners[0].m_y - p_view->m_corners[4].m_y;
+	edge0.m_z = p_view->m_corners[0].m_z - p_view->m_corners[4].m_z;
+	edge1.m_x = p_view->m_corners[5].m_x - p_view->m_corners[4].m_x;
+	edge1.m_y = p_view->m_corners[5].m_y - p_view->m_corners[4].m_y;
+	edge1.m_z = p_view->m_corners[5].m_z - p_view->m_corners[4].m_z;
+	GolMath::CrossVector3(&edge0, &edge1, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[3].m_normal = normal;
-	p_view->m_planes[3].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[3].SetNormal(normal);
+	p_view->m_planes[3].m_distance = -Dot(&p_view->m_planes[3].m_normal, &p_view->m_corners[4]);
 
 	m_transform->GetRight(&normal);
-	p_view->m_planes[5].m_normal = normal;
-	p_view->m_planes[5].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[5].SetNormal(normal);
+	p_view->m_planes[5].m_distance = -Dot(&p_view->m_planes[5].m_normal, &p_view->m_corners[4]);
 
-	normal.m_x = -normal.m_x;
-	normal.m_y = -normal.m_y;
-	normal.m_z = -normal.m_z;
-	p_view->m_planes[4].m_normal = normal;
-	p_view->m_planes[4].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[2]);
+	p_view->m_planes[4].m_normal.m_x = -normal.m_x;
+	p_view->m_planes[4].m_normal.m_y = -normal.m_y;
+	p_view->m_planes[4].m_normal.m_z = -normal.m_z;
+	p_view->m_planes[4].m_distance = (p_view->m_corners[2].m_z) * (normal.m_z) +
+									 (p_view->m_corners[2].m_y) * (normal.m_y) + p_view->m_corners[2].m_x * normal.m_x;
 }
 
 // FUNCTION: GOLDP 0x1001c450
 void GolCameraBase::ComputeFrustumFromBounds(GolViewFrustum* p_view)
 {
 	m_transform->GetPosition(&p_view->m_position);
-
-	LegoFloat farScale = m_farClip / m_nearClip;
-	LegoFloat farLeft = m_viewBounds.m_x * farScale;
-	LegoFloat farBottom = m_viewBounds.m_y * farScale;
-	LegoFloat farRight = m_viewBounds.m_z * farScale;
-	LegoFloat farTop = m_viewBounds.m_u * farScale;
-
-	m_farHalfHeight = farTop - farBottom;
-	m_farHalfWidth = farRight - farLeft;
-
+	LegoFloat farScale = ((((((m_farClip)))))) / m_nearClip;
 	GolVec3 source;
-	source.m_x = farLeft;
-	source.m_y = farBottom;
+	GolVec4 farBounds;
+	farBounds.m_x = m_viewBounds.m_x;
+	farBounds.m_x *= farScale;
+	farBounds.m_z = m_viewBounds.m_z;
+	farBounds.m_z *= farScale;
+	farBounds.m_y = m_viewBounds.m_y;
+	farBounds.m_y *= farScale;
+	farBounds.m_u = m_viewBounds.m_u;
+	farBounds.m_u *= farScale;
+	m_farHalfHeight = farBounds.m_u - farBounds.m_y;
+	m_farHalfWidth = farBounds.m_z - farBounds.m_x;
+	source.m_x = farBounds.m_x;
+	source.m_y = farBounds.m_y;
 	source.m_z = m_farClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[0]);
-
-	source.m_x = farLeft;
-	source.m_y = farTop;
-	source.m_z = m_farClip;
+	source.m_y = farBounds.m_u;
 	m_transform->TransformPoint(&source, &p_view->m_corners[2]);
-
-	source.m_x = farRight;
-	source.m_y = farBottom;
-	source.m_z = m_farClip;
+	source.m_x = farBounds.m_z;
+	source.m_y = farBounds.m_y;
 	m_transform->TransformPoint(&source, &p_view->m_corners[1]);
-
-	source.m_x = farRight;
-	source.m_y = farTop;
-	source.m_z = m_farClip;
+	source.m_y = farBounds.m_u;
 	m_transform->TransformPoint(&source, &p_view->m_corners[3]);
 
 	source.m_x = m_viewBounds.m_x;
 	source.m_y = m_viewBounds.m_y;
 	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[4]);
-
-	source.m_x = m_viewBounds.m_x;
 	source.m_y = m_viewBounds.m_u;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[6]);
-
 	source.m_x = m_viewBounds.m_z;
 	source.m_y = m_viewBounds.m_y;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[5]);
-
-	source.m_x = m_viewBounds.m_z;
 	source.m_y = m_viewBounds.m_u;
-	source.m_z = m_nearClip;
 	m_transform->TransformPoint(&source, &p_view->m_corners[7]);
 
 	GolVec3 edge0;
 	GolVec3 edge1;
 	GolVec3 normal;
 
-	edge0 = p_view->m_corners[0] - p_view->m_corners[4];
-	edge1 = p_view->m_corners[6] - p_view->m_corners[4];
-	normal.m_x = edge1.m_y * edge0.m_z - edge1.m_z * edge0.m_y;
-	normal.m_y = edge1.m_z * edge0.m_x - edge1.m_x * edge0.m_z;
-	normal.m_z = edge1.m_x * edge0.m_y - edge1.m_y * edge0.m_x;
+	edge0.m_x = p_view->m_corners[0].m_x - p_view->m_corners[4].m_x;
+	edge0.m_y = p_view->m_corners[0].m_y - p_view->m_corners[4].m_y;
+	edge0.m_z = p_view->m_corners[0].m_z - p_view->m_corners[4].m_z;
+	edge1.m_x = p_view->m_corners[6].m_x - p_view->m_corners[4].m_x;
+	edge1.m_y = p_view->m_corners[6].m_y - p_view->m_corners[4].m_y;
+	edge1.m_z = p_view->m_corners[6].m_z - p_view->m_corners[4].m_z;
+	GolMath::CrossVector3(&edge1, &edge0, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[0].m_normal = normal;
-	p_view->m_planes[0].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[0].SetNormal(normal);
+	p_view->m_planes[0].m_distance = -Dot(&p_view->m_planes[0].m_normal, &p_view->m_corners[4]);
 
-	edge0 = p_view->m_corners[1] - p_view->m_corners[5];
-	edge1 = p_view->m_corners[7] - p_view->m_corners[5];
-	normal.m_x = edge0.m_y * edge1.m_z - edge0.m_z * edge1.m_y;
-	normal.m_y = edge0.m_z * edge1.m_x - edge0.m_x * edge1.m_z;
-	normal.m_z = edge0.m_x * edge1.m_y - edge0.m_y * edge1.m_x;
+	edge0.m_x = p_view->m_corners[1].m_x - p_view->m_corners[5].m_x;
+	edge0.m_y = p_view->m_corners[1].m_y - p_view->m_corners[5].m_y;
+	edge0.m_z = p_view->m_corners[1].m_z - p_view->m_corners[5].m_z;
+	edge1.m_x = p_view->m_corners[7].m_x - p_view->m_corners[5].m_x;
+	edge1.m_y = p_view->m_corners[7].m_y - p_view->m_corners[5].m_y;
+	edge1.m_z = p_view->m_corners[7].m_z - p_view->m_corners[5].m_z;
+	GolMath::CrossVector3(&edge0, &edge1, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[1].m_normal = normal;
-	p_view->m_planes[1].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[5]);
+	p_view->m_planes[1].SetNormal(normal);
+	p_view->m_planes[1].m_distance = -Dot(&p_view->m_planes[1].m_normal, &p_view->m_corners[5]);
 
-	edge0 = p_view->m_corners[2] - p_view->m_corners[6];
-	edge1 = p_view->m_corners[7] - p_view->m_corners[6];
-	normal.m_x = edge1.m_y * edge0.m_z - edge1.m_z * edge0.m_y;
-	normal.m_y = edge1.m_z * edge0.m_x - edge1.m_x * edge0.m_z;
-	normal.m_z = edge1.m_x * edge0.m_y - edge1.m_y * edge0.m_x;
+	edge0.m_x = p_view->m_corners[2].m_x - p_view->m_corners[6].m_x;
+	edge0.m_y = p_view->m_corners[2].m_y - p_view->m_corners[6].m_y;
+	edge0.m_z = p_view->m_corners[2].m_z - p_view->m_corners[6].m_z;
+	edge1.m_x = p_view->m_corners[7].m_x - p_view->m_corners[6].m_x;
+	edge1.m_y = p_view->m_corners[7].m_y - p_view->m_corners[6].m_y;
+	edge1.m_z = p_view->m_corners[7].m_z - p_view->m_corners[6].m_z;
+	GolMath::CrossVector3(&edge1, &edge0, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[2].m_normal = normal;
-	p_view->m_planes[2].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[6]);
+	p_view->m_planes[2].SetNormal(normal);
+	p_view->m_planes[2].m_distance = -Dot(&p_view->m_planes[2].m_normal, &p_view->m_corners[6]);
 
-	edge0 = p_view->m_corners[0] - p_view->m_corners[4];
-	edge1 = p_view->m_corners[5] - p_view->m_corners[4];
-	normal.m_x = edge0.m_y * edge1.m_z - edge0.m_z * edge1.m_y;
-	normal.m_y = edge0.m_z * edge1.m_x - edge0.m_x * edge1.m_z;
-	normal.m_z = edge0.m_x * edge1.m_y - edge0.m_y * edge1.m_x;
+	edge0.m_x = p_view->m_corners[0].m_x - p_view->m_corners[4].m_x;
+	edge0.m_y = p_view->m_corners[0].m_y - p_view->m_corners[4].m_y;
+	edge0.m_z = p_view->m_corners[0].m_z - p_view->m_corners[4].m_z;
+	edge1.m_x = p_view->m_corners[5].m_x - p_view->m_corners[4].m_x;
+	edge1.m_y = p_view->m_corners[5].m_y - p_view->m_corners[4].m_y;
+	edge1.m_z = ((p_view->m_corners[5].m_z - p_view->m_corners[4].m_z));
+	GolMath::CrossVector3(&edge0, &edge1, &normal);
 	GolMath::NormalizeVector3(normal, &normal);
-	p_view->m_planes[3].m_normal = normal;
-	p_view->m_planes[3].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[3].SetNormal(normal);
+	p_view->m_planes[3].m_distance = -Dot(&p_view->m_planes[3].m_normal, &p_view->m_corners[4]);
 
 	m_transform->GetRight(&normal);
-	p_view->m_planes[5].m_normal = normal;
-	p_view->m_planes[5].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[4]);
+	p_view->m_planes[5].SetNormal(normal);
+	p_view->m_planes[5].m_distance = -Dot(&p_view->m_planes[5].m_normal, &p_view->m_corners[4]);
 
-	normal.m_x = -normal.m_x;
-	normal.m_y = -normal.m_y;
-	normal.m_z = -normal.m_z;
-	p_view->m_planes[4].m_normal = normal;
-	p_view->m_planes[4].m_distance = -GOLVECTOR3_DOT(normal, p_view->m_corners[2]);
+	p_view->m_planes[4].m_normal.m_x = -normal.m_x;
+	p_view->m_planes[4].m_normal.m_y = -normal.m_y;
+	p_view->m_planes[4].m_normal.m_z = -normal.m_z;
+	p_view->m_planes[4].m_distance = (p_view->m_corners[2].m_z) * (normal.m_z) +
+									 (p_view->m_corners[2].m_y) * (normal.m_y) + p_view->m_corners[2].m_x * normal.m_x;
 }
 
 // FUNCTION: GOLDP 0x1001c900
@@ -343,16 +328,20 @@ LegoBool32 GolCameraBase::ProjectSphere(GolVec3* p_center, LegoFloat p_radius, G
 	m_transform->GetUp(&up);
 
 	const GolViewFrustum::Plane* plane = &m_viewFrustum.m_planes[1];
-	LegoFloat dot = plane->m_normal.m_z;
-	dot *= up.m_z;
-	dot += plane->m_normal.m_y * up.m_y;
-	dot += up.m_x * plane->m_normal.m_x;
+	LegoFloat dot = ((
+		(((GOL_MUL(plane->m_normal.m_y, up.m_y) + GOL_MUL(plane->m_normal.m_z, up.m_z) +
+		   GOL_MUL(up.m_x, plane->m_normal.m_x))))
+	));
 	dot = -dot;
 	LegoFloat scale = p_radius / dot;
 	{
 		GolVec3 scaledAxis;
-		scaledAxis.m_x = up.m_x * scale;
-		scaledAxis.m_y = up.m_y * scale;
+		LegoFloat x = up.m_x;
+		x *= scale;
+		scaledAxis.m_x = x;
+		LegoFloat y = up.m_y;
+		y *= scale;
+		scaledAxis.m_y = y;
 		scaledAxis.m_z = up.m_z * scale;
 		tangentPoint.m_x = scaledAxis.m_x + p_center->m_x;
 		tangentPoint.m_y = scaledAxis.m_y + p_center->m_y;
@@ -361,15 +350,17 @@ LegoBool32 GolCameraBase::ProjectSphere(GolVec3* p_center, LegoFloat p_radius, G
 	}
 
 	plane = &m_viewFrustum.m_planes[0];
-	dot = plane->m_normal.m_z;
-	dot *= up.m_z;
-	dot += plane->m_normal.m_y * up.m_y;
-	dot += up.m_x * plane->m_normal.m_x;
+	dot = GOL_MUL(plane->m_normal.m_y, up.m_y) + GOL_MUL(plane->m_normal.m_z, up.m_z) +
+		  GOL_MUL(up.m_x, plane->m_normal.m_x);
 	scale = -(p_radius / dot);
 	{
 		GolVec3 scaledAxis;
-		scaledAxis.m_x = up.m_x * scale;
-		scaledAxis.m_y = up.m_y * scale;
+		LegoFloat x = scale;
+		x *= up.m_x;
+		scaledAxis.m_x = x;
+		LegoFloat y = up.m_y;
+		y *= scale;
+		scaledAxis.m_y = y;
 		scaledAxis.m_z = up.m_z * scale;
 		tangentPoint.m_x = scaledAxis.m_x + p_center->m_x;
 		tangentPoint.m_y = scaledAxis.m_y + p_center->m_y;
@@ -380,15 +371,19 @@ LegoBool32 GolCameraBase::ProjectSphere(GolVec3* p_center, LegoFloat p_radius, G
 	m_transform->GetForward(&forward);
 
 	plane = &m_viewFrustum.m_planes[3];
-	dot = plane->m_normal.m_z;
-	dot *= forward.m_z;
-	dot += plane->m_normal.m_y * forward.m_y;
-	dot += forward.m_x * plane->m_normal.m_x;
+	dot = ((((
+		((((GOL_MUL(plane->m_normal.m_y, forward.m_y) + GOL_MUL(plane->m_normal.m_z, forward.m_z) +
+			GOL_MUL(forward.m_x, plane->m_normal.m_x)))))
+	))));
 	scale = -(p_radius / dot);
 	{
 		GolVec3 scaledAxis;
-		scaledAxis.m_x = forward.m_x * scale;
-		scaledAxis.m_y = forward.m_y * scale;
+		LegoFloat x = scale;
+		x *= forward.m_x;
+		scaledAxis.m_x = x;
+		LegoFloat y = forward.m_y;
+		y *= scale;
+		scaledAxis.m_y = y;
 		scaledAxis.m_z = forward.m_z * scale;
 		tangentPoint.m_x = scaledAxis.m_x + p_center->m_x;
 		tangentPoint.m_y = scaledAxis.m_y + p_center->m_y;
@@ -397,16 +392,18 @@ LegoBool32 GolCameraBase::ProjectSphere(GolVec3* p_center, LegoFloat p_radius, G
 	}
 
 	plane = &m_viewFrustum.m_planes[2];
-	dot = plane->m_normal.m_z;
-	dot *= forward.m_z;
-	dot += plane->m_normal.m_y * forward.m_y;
-	dot += forward.m_x * plane->m_normal.m_x;
+	dot = GOL_MUL(plane->m_normal.m_y, forward.m_y) + GOL_MUL(plane->m_normal.m_z, forward.m_z) +
+		  GOL_MUL(forward.m_x, plane->m_normal.m_x);
 	dot = -dot;
 	scale = p_radius / dot;
 	{
 		GolVec3 scaledAxis;
-		scaledAxis.m_x = forward.m_x * scale;
-		scaledAxis.m_y = forward.m_y * scale;
+		LegoFloat x = forward.m_x;
+		x *= scale;
+		scaledAxis.m_x = x;
+		LegoFloat y = forward.m_y;
+		y *= scale;
+		scaledAxis.m_y = y;
 		scaledAxis.m_z = forward.m_z * scale;
 		tangentPoint.m_x = scaledAxis.m_x + p_center->m_x;
 		tangentPoint.m_y = scaledAxis.m_y + p_center->m_y;

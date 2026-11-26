@@ -136,18 +136,18 @@ LegoBool32 AwardCinematicScreen::Destroy()
 // FUNCTION: LEGORACERS 0x00475f40
 void AwardCinematicScreen::CreateWidgets()
 {
-	struct ResourcePathLocals {
-		LegoChar m_name[12];
-		GolString m_string;
-		LegoChar m_path[20];
-	} locals;
+	LegoChar name[10];
+	GolString string;
+	LegoChar path[20];
 
 	GolAnimatedEntity* sourceDriverEntity = NULL;
-	GolModelEntity* carBodyEntity = NULL;
 	GolAnimatedEntity* swapEntity = NULL;
+	GolModelEntity* carBodyEntity = NULL;
 	GolAnimatedEntity* pLegEntity = NULL;
 	LegoBool32 carCreated = FALSE;
 	DriverCosmetics cosmetics;
+	LegoU32 i;
+	CutsceneDefinition* definition;
 
 	if (m_resourceMenuId != c_menuWinVvCar) {
 		if (!m_context->m_modelBuilder.HasMenuResources()) {
@@ -165,17 +165,18 @@ void AwardCinematicScreen::CreateWidgets()
 		}
 	}
 
-	m_menuNameStrings->CopyStringByIndex(&locals.m_string, m_resourceMenuId);
-	locals.m_string.CopyToString(locals.m_name);
-	::sprintf(locals.m_path, "MENUDATA\\%s", locals.m_name);
+	m_menuNameStrings->CopyStringByIndex(&string, m_resourceMenuId);
+	string.CopyToString(name);
+	::sprintf(path, "MENUDATA\\%s", name);
 
 	if (g_hashTable) {
-		g_hashTable->SetCurrentEntryFromString(locals.m_path);
+		g_hashTable->SetCurrentEntryFromString(path);
 	}
 
 	CreateRegion(&m_sceneWidget, m_resourceMenuId);
 	m_sceneWidget.m_skippable = FALSE;
 	CutsceneDefinition::Frame* frame = m_sceneWidget.m_frame;
+	definition = frame->GetDefinition();
 
 	if (m_resourceMenuId == c_menuCircuit7) {
 		SaveRecordList::Record* record = m_context->m_saveSystem.GetActiveRecord().GetSelectedRecord();
@@ -186,8 +187,8 @@ void AwardCinematicScreen::CreateWidgets()
 		}
 	}
 
-	for (LegoU32 i = 0; i < m_sceneWidget.m_definition.GetWorldDatabaseCount(); i++) {
-		GolWorldDatabase* worldDatabase = m_sceneWidget.m_definition.GetWorldDatabase(i);
+	for (i = 0; i < definition->GetWorldDatabaseCount(); i++) {
+		GolWorldDatabase* worldDatabase = definition->GetWorldDatabase(i);
 		if (!sourceDriverEntity) {
 			sourceDriverEntity = worldDatabase->FindAnimatedEntity("guy1");
 		}
@@ -261,15 +262,16 @@ void AwardCinematicScreen::CreateWidgets()
 			}
 
 			carCreated = CreateWinnerCar(slotIndex);
-			ClearCosmeticTable();
-			m_context->m_chassisModels.ReleaseInstances();
-			m_context->m_championDefinitions.ClearDefinitions();
 		}
 
-		if (carBodyEntity && (swapEntity || pLegEntity)) {
-			MaterialTable* carBodyMaterials = carBodyEntity->GetPrimaryMaterialTable();
-			if (!carBodyMaterials) {
-				carBodyMaterials = carBodyEntity->GetModel(0)->GetMaterialTable();
+		ClearCosmeticTable();
+		m_context->m_chassisModels.ReleaseInstances();
+		m_context->m_championDefinitions.ClearDefinitions();
+
+		if (swapEntity || pLegEntity) {
+			MaterialTable* driverMaterials = m_driverEntity.GetPrimaryMaterialTable();
+			if (!driverMaterials) {
+				driverMaterials = m_driverEntity.GetModel(0)->GetMaterialTable();
 			}
 
 			if (swapEntity) {
@@ -277,7 +279,7 @@ void AwardCinematicScreen::CreateWidgets()
 				if (!swapMaterials) {
 					swapMaterials = swapEntity->GetModel(0)->GetMaterialTable();
 				}
-				swapMaterials->SetEntry(0, carBodyMaterials->GetEntry(1));
+				swapMaterials->SetEntry(0, driverMaterials->GetEntry(1));
 			}
 
 			if (pLegEntity) {
@@ -285,63 +287,61 @@ void AwardCinematicScreen::CreateWidgets()
 				if (!pLegMaterials) {
 					pLegMaterials = pLegEntity->GetModel(0)->GetMaterialTable();
 				}
-				pLegMaterials->SetEntry(0, carBodyMaterials->GetEntry(1));
+				pLegMaterials->SetEntry(0, driverMaterials->GetEntry(1));
 			}
 		}
 
-		if (frame) {
-			for (LegoU32 i = 0; i < frame->GetModelEventCount(); i++) {
-				CutsceneDefinition::Frame::ModelEvent* model = frame->GetModel(i);
-				GolWorldEntity* entity = model->GetEntity();
-				if (entity == sourceDriverEntity) {
-					model->SetEntity(&m_driverEntity);
+		for (i = 0; i < frame->GetModelEventCount(); i++) {
+			CutsceneDefinition::Frame::ModelEvent* model = frame->GetModel(i);
+			GolWorldEntity* entity = model->GetEntity();
+			if (entity == sourceDriverEntity) {
+				model->SetEntity(&m_driverEntity);
 
-					for (LegoU32 j = 0; j < model->GetAnimationCount(); j++) {
-						CutsceneDefinition::Frame::ModelEvent::Animation* animation = model->GetAnimation(j);
-						MabMaterialFrame* animationItems = animation->m_materialAnimation->GetFrames();
-						MabMaterialTrack* animationItem = animation->m_item;
-						LegoS32 firstFrame = animationItem->GetFirstFrame();
-						LegoS32 endFrame = firstFrame + animationItem->GetFrameCount();
+				for (LegoU32 j = 0; j < model->GetAnimationCount(); j++) {
+					CutsceneDefinition::Frame::ModelEvent::Animation* animation = model->GetAnimation(j);
+					MabMaterialTrack* animationItem = animation->m_item;
+					MabMaterialFrame* animationItems = animation->m_materialAnimation->GetFrames();
+					LegoS32 firstFrame = animationItem->GetFirstFrame();
+					LegoS32 endFrame = firstFrame + animationItem->GetFrameCount();
 
-						for (LegoS32 frameIndex = firstFrame; frameIndex < endFrame; frameIndex++) {
-							GolMaterial* material = animationItems[frameIndex].GetMaterial();
-							GolName expressionName;
-							::memcpy(expressionName, material->GetName(), sizeof(GolName));
-							LegoS32 expressionIndex = 0;
+					for (LegoS32 frameIndex = firstFrame; frameIndex < endFrame; frameIndex++) {
+						GolMaterial* material = animationItems[frameIndex].GetMaterial();
+						GolName expressionName;
+						::memcpy(expressionName, material->GetName(), sizeof(GolName));
+						LegoS32 expressionIndex = 0;
 
-							if (::strncmp(expressionName, "face", sizeof(GolName)) != 0) {
-								if (::strncmp(expressionName, "angry", sizeof(GolName)) == 0) {
-									expressionIndex = 1;
-								}
-								else if (::strncmp(expressionName, "blink", sizeof(GolName)) == 0) {
-									expressionIndex = 2;
-								}
-								else if (::strncmp(expressionName, "happy", sizeof(GolName)) == 0) {
-									expressionIndex = 3;
-								}
-								else if (::strncmp(expressionName, "sad", sizeof(GolName)) == 0) {
-									expressionIndex = 4;
-								}
-								else if (::strncmp(expressionName, "suprz", sizeof(GolName)) == 0) {
-									expressionIndex = 5;
-								}
+						if (::strncmp(expressionName, "dflt", sizeof(GolName)) != 0) {
+							if (::strncmp(expressionName, "angry", sizeof(GolName)) == 0) {
+								expressionIndex = 1;
 							}
-
-							m_context->m_partCatalog
-								.BuildFaceExpressionName(cosmetics.m_faceIndex, expressionIndex, expressionName);
-							animationItems[frameIndex].SetMaterial(m_renderer->FindMaterialByName(expressionName));
+							else if (::strncmp(expressionName, "blink", sizeof(GolName)) == 0) {
+								expressionIndex = 2;
+							}
+							else if (::strncmp(expressionName, "happy", sizeof(GolName)) == 0) {
+								expressionIndex = 3;
+							}
+							else if (::strncmp(expressionName, "sad", sizeof(GolName)) == 0) {
+								expressionIndex = 4;
+							}
+							else if (::strncmp(expressionName, "suprz", sizeof(GolName)) == 0) {
+								expressionIndex = 5;
+							}
 						}
+
+						m_context->m_partCatalog
+							.BuildFaceExpressionName(cosmetics.m_faceIndex, expressionIndex, expressionName);
+						animationItems[frameIndex].SetMaterial(m_renderer->FindMaterialByName(expressionName));
 					}
 				}
-				else if (entity == carBodyEntity) {
-					if (carCreated) {
-						model->SetEntity(&m_carGroup);
-					}
+			}
+			else if (entity == carBodyEntity) {
+				if (carCreated) {
+					model->SetEntity(&m_carGroup);
 				}
-				else if (entity == swapEntity || entity == pLegEntity) {
-					if (cosmetics.m_legIndex != 10) {
-						model->SetEntity(NULL);
-					}
+			}
+			else if (entity == swapEntity || entity == pLegEntity) {
+				if (cosmetics.m_legIndex != 10) {
+					model->SetEntity(NULL);
 				}
 			}
 		}
@@ -349,7 +349,6 @@ void AwardCinematicScreen::CreateWidgets()
 
 	if (m_resourceMenuId == c_menuWinCar) {
 		GolNameTable* textVisuals = m_sceneWidget.m_player.GetTextVisuals();
-		const LegoChar* driverName = m_context->m_context->m_playerSetupSlots[1].m_driverName;
 		GolName textName;
 
 		textName[0] = 't';
@@ -361,35 +360,40 @@ void AwardCinematicScreen::CreateWidgets()
 		textName[6] = '\0';
 
 		CutsceneTextVisual* textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5]) {
 			textVisual->SetDisabled(TRUE);
 		}
 
 		textName[4] = 'K';
 		textName[5] = 'K';
 		textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5]) {
 			textVisual->SetDisabled(TRUE);
 		}
 
 		textName[4] = 'B';
 		textName[5] = 'B';
 		textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5]) {
 			textVisual->SetDisabled(TRUE);
 		}
 
 		textName[4] = 'J';
 		textName[5] = 'T';
 		textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5]) {
 			textVisual->SetDisabled(TRUE);
 		}
 
 		textName[4] = 'G';
 		textName[5] = 'M';
 		textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5]) {
 			textVisual->SetDisabled(TRUE);
 		}
 
@@ -398,7 +402,9 @@ void AwardCinematicScreen::CreateWidgets()
 		textName[6] = 'B';
 		textName[7] = '\0';
 		textVisual = static_cast<CutsceneTextVisual*>(textVisuals->GetName(textName));
-		if (driverName[0] != textName[4] || driverName[1] != textName[5] || driverName[2] != textName[6]) {
+		if (m_context->m_context->m_playerSetupSlots[1].m_driverName[0] != textName[4] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[1] != textName[5] ||
+			m_context->m_context->m_playerSetupSlots[1].m_driverName[2] != textName[6]) {
 			textVisual->SetDisabled(TRUE);
 		}
 	}
@@ -638,10 +644,13 @@ LegoBool32 AwardCinematicScreen::CreateWinnerCar(undefined4)
 
 				if (g_hashTable) {
 					currentEntry = g_hashTable->GetCurrentEntry();
-					g_hashTable->SetCurrentEntryFromString("MENUDATA\\PIECEDB");
 				}
 				else {
 					currentEntry = NULL;
+				}
+
+				if (g_hashTable) {
+					g_hashTable->SetCurrentEntryFromString("MENUDATA\\PIECEDB");
 				}
 
 				GolAnimatedEntity* primary;

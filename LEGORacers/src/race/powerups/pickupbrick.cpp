@@ -15,9 +15,6 @@ extern const LegoFloat g_ghostSampleFractionScale;
 
 extern const LegoFloat g_brickScalePercentBase;
 
-// GLOBAL: LEGORACERS 0x004b0400
-extern const LegoFloat g_brickSettleRate = 0.002f;
-
 // GLOBAL: LEGORACERS 0x004b14ac
 const LegoFloat g_brickScale = 0.8f;
 
@@ -107,7 +104,7 @@ void PickupBrick::Update(LegoU32 p_elapsedMs)
 			m_scale = (LegoS32) p_elapsedMs * 0.0024999999f;
 		}
 		else if (p_elapsedMs < 500) {
-			m_scale = 1.0f - (LegoS32) (p_elapsedMs - 400) * g_brickSettleRate;
+			m_scale = 1.0f - (LegoS32) (p_elapsedMs - 400) * 0.002f;
 		}
 		break;
 	case c_stateTransition:
@@ -161,7 +158,7 @@ void PickupBrick::Draw(GolD3DRenderDevice* p_renderer)
 		GolVec3 position;
 		m_worldEntity.GetPosition(&position);
 		m_model->SetPosition(position);
-		m_model->SetScaleThenInvalidateRadius(m_scale);
+		m_model->SetScaleAndInvalidateRadius(m_scale);
 		m_model->Draw(*p_renderer);
 	}
 }
@@ -174,7 +171,7 @@ void PickupBrick::DrawTransparent(GolD3DRenderDevice* p_renderer)
 		GolVec3 position;
 		m_worldEntity.GetPosition(&position);
 		m_blendModel->SetPosition(position);
-		m_blendModel->SetScaleThenInvalidateRadius(m_scale);
+		m_blendModel->SetScaleAndInvalidateRadius(m_scale);
 		m_blendModel->Draw(*p_renderer);
 	}
 }

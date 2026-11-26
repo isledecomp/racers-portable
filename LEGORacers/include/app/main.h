@@ -4,12 +4,6 @@
 #include "app/legoracers.h"
 #include "types.h"
 
-// SIZE 0x84
-struct CommandLineArgs {
-	LegoS32 m_argc;       // 0x00
-	LegoChar* m_argv[32]; // 0x04
-};
-
 extern LegoRacers g_racers;
 
 LegoS32 GameMain(LegoS32 p_argc, LegoChar** p_argv);

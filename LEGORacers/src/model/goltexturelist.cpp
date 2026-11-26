@@ -39,19 +39,13 @@ void GolTextureList::LoadTextures()
 				flags |= GolTexture::c_textureFlagBlackColorKey;
 			}
 
-			LegoU16 textureFlags = flags;
-			texture->m_textureFlags = flags;
-			LegoU16 mipmapCount = sourceItem.m_mipmapCount;
-			texture->m_mipmapCount = mipmapCount;
-			textureFlags |= GolTexture::c_textureFlagColorKeyDirty;
-			texture->m_textureFlags = textureFlags;
-			texture->m_colorKey = sourceItem.m_colorKey;
-			texture->m_colorKey.m_alp = 0;
+			texture->SetTextureFlags(flags);
+			texture->SetTextureDefinition(sourceItem.m_mipmapCount, flags, sourceItem.m_colorKey);
 
 			m_renderer->SelectTextureFormat(
 				sourceItem.m_textureFormat,
 				&textureFormat,
-				textureFlags & GolTexture::c_textureFlagColorKeyed
+				texture->GetTextureFlags() & GolTexture::c_textureFlagColorKeyed
 			);
 			AllocateTexture(i, textureFormat, sourceItem.m_width, sourceItem.m_height);
 			m_textureSource->OnTextureLoaded(i, 0, texture);
@@ -69,11 +63,12 @@ void GolTextureList::LoadTextures()
 			continue;
 		}
 
-		LegoChar firstChar = texture->m_name[0];
-		::memcpy(textureName, texture->m_name, sizeof(GolName));
-		if (firstChar == '\0') {
+		GolName sourceName;
+		::memcpy(sourceName, texture->GetName(), sizeof(GolName));
+		if (sourceName[0] == '\0') {
 			continue;
 		}
+		::memcpy(textureName, sourceName, sizeof(GolName));
 		textureName[sizeof(GolName)] = '\0';
 
 		LegoU8 textureFlags = static_cast<LegoU8>(texture->m_textureFlags);

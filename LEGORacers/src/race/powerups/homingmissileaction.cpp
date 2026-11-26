@@ -30,8 +30,6 @@ const LegoFloat g_missileTargetMinDistanceSquared = 100.0f;
 // GLOBAL: LEGORACERS 0x004b1688
 const LegoFloat g_missileTargetMaxDistanceSquared = 160000.0f;
 
-extern const LegoFloat g_scarNormalThreshold;
-
 // GLOBAL: LEGORACERS 0x004b1664
 const LegoFloat g_missileExplodeSoundMinDistance = 200.0f;
 
@@ -49,6 +47,9 @@ const LegoFloat g_missileAimAheadDistance = 500.0f;
 
 // GLOBAL: LEGORACERS 0x004b1678
 const LegoFloat g_missileLaunchHeight = 4.0f;
+
+// GLOBAL: LEGORACERS 0x004b167c
+const LegoFloat g_missileTrailWidth = 1.0f;
 
 // GLOBAL: LEGORACERS 0x004b168c
 const LegoFloat g_missileTargetConeCosine = 0.70709997f;
@@ -191,7 +192,7 @@ void HomingMissileAction::LaunchProjectile()
 
 		GolVec3 scaledDirection;
 		scaledDirection.m_x = direction.m_x * g_missileAimAheadDistance;
-		scaledDirection.m_y = direction.m_y * g_missileAimAheadDistance;
+		scaledDirection.m_y = GOL_MUL(direction.m_y, g_missileAimAheadDistance);
 		scaledDirection.m_z = direction.m_z * g_missileAimAheadDistance;
 
 		GolVec3 target;
@@ -216,8 +217,8 @@ void HomingMissileAction::LaunchProjectile()
 		projectile->LaunchAtRacer(&projectileParams, m_ownerRacer, m_targetRacer, FALSE, FALSE);
 	}
 
-	m_projectile.m_maxSpiralAmplitude = 4.0f;
-	m_projectile.m_spiralRate = 10.0f;
+	m_projectile.SetMaxSpiralAmplitude(4.0f);
+	m_projectile.SetSpiralRate(10.0f);
 	m_projectile.StartHoming();
 }
 
@@ -238,27 +239,36 @@ void HomingMissileAction::Deactivate()
 // FUNCTION: LEGORACERS 0x004568f0
 void HomingMissileAction::Update(LegoU32 p_elapsedMs)
 {
+	GolAnimatedEntity* missileEntity;
 	GolVec3 direction;
 	GolVec3 up;
+	GolVec3 armedPosition;
+	SoundVector hitPosition;
+	GolVec3 position;
+	GolVec3 velocity;
+	GolVec2 perpendicular;
+	GolVec3 positions[4];
 
 	if (m_state == c_stateArmed) {
-		m_missileEntity.Update(p_elapsedMs);
-		if (m_missileEntity.IsPartAnimationDone()) {
+		missileEntity = &m_missileEntity;
+		missileEntity->Update(p_elapsedMs);
+		if (missileEntity->IsPartAnimationDone()) {
 			AdvanceState();
 		}
 		else {
-			GolVec3 position;
 			CarVisuals* racerField = &m_ownerRacer->m_visuals;
-			racerField->m_carEntity->GetPosition(&position);
-			m_missileEntity.SetPosition(position);
-			m_missileEntity.CopyOrientationFrom(*m_ownerRacer->m_physics.m_carEntity);
+			racerField->m_carEntity->GetPosition(&armedPosition);
+			missileEntity->SetPosition(armedPosition);
+			missileEntity->CopyOrientationFrom(*m_ownerRacer->m_physics.m_carEntity);
 			return;
 		}
 	}
 
 	if (m_state == c_stateFlying) {
-		m_missileEntity.Update(p_elapsedMs);
-		m_projectile.UpdateTargeting(
+		missileEntity = &m_missileEntity;
+		missileEntity->Update(p_elapsedMs);
+		HomingProjectile* projectile = &m_projectile;
+		projectile->UpdateTargeting(
 			p_elapsedMs,
 			m_owner->m_raceState,
 			g_missileTargetMinDistanceSquared,
@@ -266,10 +276,9 @@ void HomingMissileAction::Update(LegoU32 p_elapsedMs)
 			g_missileTargetConeCosine
 		);
 
-		LegoS32 projectileState = m_projectile.Update(p_elapsedMs);
+		LegoS32 projectileState = projectile->Update(p_elapsedMs);
 		if (projectileState != PowerupProjectile::c_stateFlying) {
-			SoundVector position;
-			GolVec3& positionBase = position;
+			GolVec3& positionBase = hitPosition;
 			positionBase = m_projectile.GetHitPosition();
 
 			LegoBool32 skipBurst = FALSE;
@@ -284,7 +293,7 @@ void HomingMissileAction::Update(LegoU32 p_elapsedMs)
 			else {
 				m_soundSource->PlaySpatialSoundById(
 					c_soundExplode,
-					&position,
+					&hitPosition,
 					g_missileExplodeSoundMinDistance,
 					g_missileExplodeSoundMaxDistance,
 					1.0f,
@@ -293,21 +302,19 @@ void HomingMissileAction::Update(LegoU32 p_elapsedMs)
 			}
 
 			if (!skipBurst) {
-				GolVec3 hitNormal = m_projectile.GetHitNormal();
-				LegoBool32 upwardHit = FALSE;
-				if (projectileState == PowerupProjectile::c_stateHitWorld && hitNormal.m_z > g_scarNormalThreshold) {
-					upwardHit = TRUE;
-				}
+				up = m_projectile.GetHitNormal();
+				LegoBool32 upwardHit =
+					(projectileState == PowerupProjectile::c_stateHitWorld && up.m_z > 0.7071f) ? TRUE : FALSE;
 
-				m_owner->FUN_0045b4d0(&position, upwardHit, m_ownerRacer);
+				m_owner->FUN_0045b4d0(&hitPosition, upwardHit, m_ownerRacer);
 				if (projectileState == PowerupProjectile::c_stateHitRacer &&
 					!(m_projectile.GetHitRacer()->m_flags & Racer::c_flagShielded)) {
-					m_projectile.GetVelocity(&direction);
+					projectile->GetVelocity(&direction);
 					direction.m_x = -direction.m_x;
 					direction.m_y = -direction.m_y;
 					direction.m_z = 0.0f;
 					GolMath::NormalizeVector3(direction, &direction);
-					m_owner->SpawnBrickDebris(&position, &direction, m_projectile.GetHitRacer());
+					m_owner->SpawnBrickDebris(&hitPosition, &direction, m_projectile.GetHitRacer());
 				}
 
 				AdvanceState();
@@ -316,38 +323,38 @@ void HomingMissileAction::Update(LegoU32 p_elapsedMs)
 			return;
 		}
 
-		m_missileEntity.GetAxes(&direction, &up);
-		direction = m_projectile.m_direction;
-		m_missileEntity.SetDirectionUp(direction, up);
+		missileEntity->GetAxes(&direction, &up);
+		direction.m_x = projectile->m_direction.m_x;
+		direction.m_y = projectile->m_direction.m_y;
+		direction.m_z = projectile->m_direction.m_z;
+		missileEntity->SetDirectionUp(direction, up);
 
-		GolVec3 position;
-		m_missileEntity.GetPosition(&position);
+		missileEntity->GetPosition(&position);
 
 		if (m_trail != NULL) {
-			GolVec3 velocity;
-			m_projectile.GetVelocity(&velocity);
+			projectile->GetVelocity(&velocity);
 
-			GolVec2 perpendicular;
 			perpendicular.m_x = velocity.m_y;
 			perpendicular.m_y = -velocity.m_x;
-			if (perpendicular.m_y != 0.0f || perpendicular.m_x != 0.0f) {
+			if (perpendicular.m_x != 0.0f || perpendicular.m_y != 0.0f) {
 				GolMath::NormalizeVector2(perpendicular, &perpendicular);
-				perpendicular.m_x *= 1.0f;
-				perpendicular.m_y *= 1.0f;
+				perpendicular.m_x *= g_missileTrailWidth;
+				LegoFloat scaledY = perpendicular.m_y;
+				scaledY *= g_missileTrailWidth;
+				perpendicular.m_y = scaledY;
 
-				GolVec3 positions[4];
 				positions[0].m_x = position.m_x - perpendicular.m_x * 0.5f;
 				positions[0].m_y = position.m_y - perpendicular.m_y * 0.5f;
-				positions[0].m_z = position.m_z + 1.0f * 0.5f;
+				positions[0].m_z = position.m_z + g_missileTrailWidth * 0.5f;
 				positions[1].m_x = positions[0].m_x;
 				positions[1].m_y = positions[0].m_y;
-				positions[1].m_z = positions[0].m_z - 1.0f;
+				positions[1].m_z = positions[0].m_z - g_missileTrailWidth;
 				positions[2].m_x = positions[0].m_x + perpendicular.m_x;
 				positions[2].m_y = positions[0].m_y + perpendicular.m_y;
 				positions[2].m_z = positions[1].m_z;
 				positions[3].m_x = positions[2].m_x;
 				positions[3].m_y = positions[2].m_y;
-				positions[3].m_z = positions[1].m_z + 1.0f;
+				positions[3].m_z = positions[1].m_z + g_missileTrailWidth;
 
 				m_trail->AddSampleWithCenter(p_elapsedMs, positions, position);
 			}

@@ -19,6 +19,8 @@ struct GolListLink {
 
 	GolListLink* InsertBefore(GolListLink* p_link);
 	GolListLink* NextValid();
+	GolListLink* NextOrNull() { return m_next->m_next ? m_next : NULL; }
+	GolListLink* PrevOrNull() { return m_prev->m_prev ? m_prev : NULL; }
 
 	GolListLink* m_prev; // 0x00
 	GolListLink* m_next; // 0x04
@@ -48,7 +50,23 @@ struct GolList {
 	void Prepend(T& p_item) { Prepend(GetLink(p_item)); }
 	GolListLink* LastLink() { return m_first; }
 	GolListLink* FirstLink() { return m_sentinel.m_next; }
+	GolListLink* EndLink() { return (GolListLink*) &m_first; }
+	GolListLink* FirstLinkOrNull() { return m_sentinel.m_next->m_next ? m_sentinel.m_next : NULL; }
+	GolListLink* LastLinkOrNull() { return m_first->m_prev ? m_first : NULL; }
 	GolListLink* FirstValidLink();
+	GolListLink* PopLastLink()
+	{
+		if (m_first == (GolListLink*) &m_sentinel) {
+			return NULL;
+		}
+
+		GolListLink* link = m_first;
+		m_first = link->m_prev;
+		link->m_prev->m_next = (GolListLink*) &m_first;
+
+		return link;
+	}
+
 	LegoBool32 IsEmpty() { return m_sentinel.m_next == (GolListLink*) &m_first; }
 	LegoBool32 IsValidLink(GolListLink* p_link) { return p_link->m_next && p_link; }
 	LegoBool32 IsValidLastLink(GolListLink* p_link) { return p_link->m_prev && p_link; }

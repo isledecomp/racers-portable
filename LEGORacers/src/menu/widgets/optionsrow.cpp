@@ -220,7 +220,8 @@ void OptionsRow::ComputeThumbRange()
 {
 	m_trackMinX = m_prevButton.GetRect()->m_right + ((m_thumb.GetRect()->m_right - m_thumb.GetRect()->m_left) >> 1);
 	m_trackMaxX = m_nextButton.GetRect()->m_left - ((m_thumb.GetRect()->m_right - m_thumb.GetRect()->m_left) >> 1);
-	m_stepWidth = static_cast<LegoFloat>(m_trackMaxX - m_trackMinX);
+	LegoFloat span = static_cast<LegoFloat>(m_trackMaxX - m_trackMinX);
+	m_stepWidth = span;
 
 	if (m_stepCount > 2) {
 		m_stepWidth = m_stepWidth / static_cast<LegoFloat>(m_stepCount - 1);
@@ -287,11 +288,10 @@ void OptionsRow::SnapThumbToValue()
 void OptionsRow::SetValue(LegoS32 p_value)
 {
 	if (p_value != m_value) {
-		double step = m_stepWidth;
-		double index = p_value;
 		Rect rect = *m_thumb.GetRect();
 		LegoS32 width = rect.m_right - rect.m_left;
-		rect.m_left = m_trackMinX + static_cast<LegoS32>(step * index) - (width >> 1);
+		rect.m_left =
+			m_trackMinX + static_cast<LegoS32>(GOL_MUL(m_stepWidth, (static_cast<LegoFloat>(p_value)))) - (width >> 1);
 		rect.m_right = width + rect.m_left;
 		m_thumb.SetRect(&rect);
 
@@ -330,8 +330,7 @@ MenuWidget* OptionsRow::OnCursorEvent(void* p_item, undefined4 p_x, undefined4 p
 	}
 
 	if (!(m_prevButton.GetStateFlags() & c_flagFocused) && !(m_nextButton.GetStateFlags() & c_flagFocused)) {
-		MenuInputDispatcher::Cursor* cursor = static_cast<MenuInputDispatcher::Cursor*>(p_item);
-		cursor->m_bounds = m_trackRect;
+		static_cast<MenuInputDispatcher::Cursor*>(p_item)->m_bounds = m_trackRect;
 
 		Rect rect = *m_thumb.GetRect();
 		LegoS32 width = rect.m_right;

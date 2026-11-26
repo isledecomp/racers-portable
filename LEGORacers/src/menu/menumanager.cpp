@@ -45,9 +45,6 @@ DECOMP_SIZE_ASSERT(GolCamera, 0x344)
 // GLOBAL: LEGORACERS 0x004b05a0
 const LegoFloat g_menuManagerMaxFloat = FLT_MAX;
 
-// GLOBAL: LEGORACERS 0x004b05d8
-LegoFloat g_inv255 = 1.0f / 255.0f;
-
 // GLOBAL: LEGORACERS 0x004beb78
 LegoFloat g_menuViewportParams[7] = {0.04f, 0.04f, 0.04f, 0.04f, 0.39f, 0.4f, 0.04f};
 
@@ -719,8 +716,9 @@ void MenuManager::PrepareRaceContext()
 		context->m_raceMode = LegoRacers::Context::c_raceModeSingle;
 
 		g_randomTableIndex = (g_randomTableIndex + 1) & 0x3ff;
-		RaceNameEntry* raceName =
-			m_gameContext.m_circuitList.GetEntries()[0].GetRaceNameEntry(g_randomTable[g_randomTableIndex] % 4);
+		LegoU16 random = g_randomTable[g_randomTableIndex];
+		LegoS32 raceIndex = static_cast<LegoS32>(random) % 4;
+		RaceNameEntry* raceName = m_gameContext.m_circuitList.GetEntries()[0].GetRaceNameEntry(raceIndex);
 
 		if (raceName) {
 			::memcpy(
@@ -797,10 +795,10 @@ void MenuManager::PrepareRaceContext()
 		g_hashTable->SetCurrentEntryFromString("MENUDATA\\PIECEDB");
 	}
 
-	m_gameContext.m_pieceLibrary.Load("LPieceLo.leg", context->m_useBinaryFiles);
+	m_gameContext.m_pieceLibrary.Load("LPieceLo.leg", m_gameContext.m_context->m_useBinaryFiles);
 	m_gameContext.m_colorTable.Initialize(m_golExport, m_renderer);
-	m_gameContext.m_colorTable.LoadMaterials("LPieceLo.WDF", context->m_useBinaryFiles, FALSE);
-	m_gameContext.m_colorTable.LoadColors("L_Colors.LEG", context->m_useBinaryFiles);
+	m_gameContext.m_colorTable.LoadMaterials("LPieceLo.WDF", m_gameContext.m_context->m_useBinaryFiles, FALSE);
+	m_gameContext.m_colorTable.LoadColors("L_Colors.LEG", m_gameContext.m_context->m_useBinaryFiles);
 	m_gameContext.m_carBuildModel
 		.Initialize(m_golExport, m_renderer, &m_gameContext.m_pieceLibrary, &m_gameContext.m_colorTable);
 
@@ -1004,9 +1002,10 @@ void MenuManager::BuildPlayerDriverModel(
 	p_record->GetCosmetics(&cosmetics);
 
 	DriverModelBuilder* modelBuilder = &m_gameContext.m_modelBuilder;
-	p_slot->m_altModel = modelBuilder->BuildDriverModel(&cosmetics, NULL, 3);
+	GolModelBase* model = modelBuilder->BuildDriverModel(&cosmetics, NULL, 3);
 	p_slot->m_previewFaceIndex = cosmetics.m_faceIndex;
-	materialTable = p_slot->m_altModel->GetMaterialTable();
+	materialTable = model->GetMaterialTable();
+	p_slot->m_altModel = model;
 	textureCount = 0;
 
 	for (materialCount = 0; materialCount < materialTable->GetCount(); materialCount++) {
@@ -1035,12 +1034,10 @@ void MenuManager::BuildPlayerDriverModel(
 
 		if (sourceMaterial->GetFlags() & GolMaterial::c_flagTextured) {
 			GolD3DTexture* texture = p_slot->m_altTextures->GetItem(textureCount++);
-			texture->SetName(static_cast<GolD3DTexture*>(params.m_texture)->GetName());
-			texture->SetSourceTextureDefinition(
-				params.m_texture->GetMipmapCount(),
-				params.m_texture->GetTextureFlags(),
-				params.m_texture->GetColorKey()
-			);
+			texture->SetNameRecord(static_cast<GolD3DTexture*>(params.m_texture)->GetNameRecord());
+			texture->SetTextureFlags(params.m_texture->GetTextureFlags());
+			texture->CopyMipmapCountFrom(params.m_texture);
+			texture->SetColorKeyValue(params.m_texture->GetColorKey());
 			params.m_texture = texture;
 		}
 		else {
@@ -1077,13 +1074,13 @@ void MenuManager::ApplySettings()
 	if (m_gameContext.m_context->GetSoundManager() != NULL) {
 		savedMusicVolume = state.GetMusicVolume();
 		m_gameContext.m_context->GetSoundManager()->SetMusicVolumeScale(1.0f);
-		musicVolume = savedMusicVolume * g_inv255;
+		musicVolume = savedMusicVolume * 0.003921569f;
 
 		if (m_gameContext.m_modelBuilder.m_musicInstance) {
 			m_gameContext.m_modelBuilder.m_musicInstance->SetVolume(musicVolume);
 		}
 		m_gameContext.m_context->GetSoundManager()->SetMusicVolumeScale(musicVolume);
-		m_gameContext.m_context->GetSoundManager()->SetVolumeScale(state.GetSoundVolume() * g_inv255);
+		m_gameContext.m_context->GetSoundManager()->SetVolumeScale(((((state.GetSoundVolume() * 0.003921569f)))));
 
 		if (state.GetStereo()) {
 			m_gameContext.m_context->GetSoundManager()->ClearMonoFlag();
@@ -1203,7 +1200,7 @@ LegoS32 MenuManager::CommitBestTimes()
 
 	GolString string;
 	LegoChar name[15];
-	undefined2 wideName[15];
+	undefined2 wideName[14];
 	LegoS32 result = FALSE;
 	LegoU32 raceIndex = 0;
 
@@ -1293,10 +1290,13 @@ void MenuManager::TakeScreenshot()
 
 	if (g_hashTable) {
 		currentEntry = g_hashTable->GetCurrentEntry();
-		g_hashTable->SetCurrentEntryFromString(NULL);
 	}
 	else {
 		currentEntry = NULL;
+	}
+
+	if (g_hashTable) {
+		g_hashTable->SetCurrentEntryFromString(NULL);
 	}
 
 	for (screenshotIndex = 0; screenshotIndex <= c_maxScreenshotIndex; screenshotIndex++) {

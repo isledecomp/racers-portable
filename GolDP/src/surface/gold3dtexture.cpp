@@ -12,6 +12,7 @@
 #include <string.h>
 
 DECOMP_SIZE_ASSERT(GolD3DTexture, 0x7c)
+DECOMP_SIZE_ASSERT(GolD3DTexture::NameRecord, 0x08)
 DECOMP_SIZE_ASSERT(MipmapLevel, 0x18)
 
 extern const ColorRGBA g_transparentBlack;
@@ -413,16 +414,13 @@ void GolD3DTexture::GenerateMipmaps()
 void GolD3DTexture::ReleaseDeviceObjects()
 {
 	LegoU32 i;
-	MipmapLevel* mipmaps = m_mipmaps;
-	GolPaletteBase* palette = m_palette;
 
-	if (mipmaps != NULL) {
-		if (palette != NULL) {
-			static_cast<GolD3DTexturePalette*>(palette)->Destroy();
+	if (m_mipmaps != NULL) {
+		if (m_palette != NULL) {
+			static_cast<GolD3DTexturePalette*>(m_palette)->Destroy();
 
-			palette = m_palette;
-			if (palette != NULL) {
-				delete static_cast<GolD3DTexturePalette*>(palette);
+			if (m_palette != NULL) {
+				delete static_cast<GolD3DTexturePalette*>(m_palette);
 			}
 
 			m_palette = NULL;
@@ -438,12 +436,11 @@ void GolD3DTexture::ReleaseDeviceObjects()
 		m_mipmaps = NULL;
 	}
 	else {
-		if (palette != NULL) {
-			static_cast<GolDirectDrawPalette*>(palette)->Release();
+		if (m_palette != NULL) {
+			static_cast<GolDirectDrawPalette*>(m_palette)->Release();
 
-			palette = m_palette;
-			if (palette != NULL) {
-				delete static_cast<GolDirectDrawPalette*>(palette);
+			if (m_palette != NULL) {
+				delete static_cast<GolDirectDrawPalette*>(m_palette);
 			}
 
 			m_palette = NULL;
@@ -646,6 +643,13 @@ void GolD3DTexture::CreateDirectDrawSurface(GolCommonDrawState* p_drawState, Gol
 	}
 }
 
+inline void ClampMax(LegoU16* p_value, LegoU16 p_max)
+{
+	if (*p_value > p_max) {
+		*p_value = p_max;
+	}
+}
+
 // FUNCTION: GOLDP 0x100168c0
 void GolD3DTexture::CreateMipmapBuffers(GolD3DRenderDevice& p_renderer)
 {
@@ -663,17 +667,16 @@ void GolD3DTexture::CreateMipmapBuffers(GolD3DRenderDevice& p_renderer)
 		m_mipmapCount = 1;
 	}
 
-	if (m_mipmapCount > 4) {
-		m_mipmapCount = 4;
-	}
+	ClampMax(&m_mipmapCount, 4);
 
-	height = m_deviceHeight;
 	width = m_deviceWidth;
+	height = m_deviceHeight;
 	minWidth = p_renderer.GetMinimumTextureWidth(m_deviceTextureFormat.m_bitsPerPixel);
 	minHeight = p_renderer.GetMinimumTextureHeight(m_deviceTextureFormat.m_bitsPerPixel);
 
-	m_mipmaps = new MipmapLevel[m_mipmapCount];
-	if (m_mipmaps == NULL) {
+	MipmapLevel*& mipmaps = m_mipmaps;
+	mipmaps = new MipmapLevel[m_mipmapCount];
+	if (mipmaps == NULL) {
 		GOL_FATALERROR(c_golErrorOutOfMemory);
 	}
 
@@ -688,9 +691,8 @@ void GolD3DTexture::CreateMipmapBuffers(GolD3DRenderDevice& p_renderer)
 		mipmap->m_height = height;
 		mipmap->m_pitch = (m_deviceTextureFormat.m_bitsPerPixel * width + 7) >> 3;
 		mipmap->m_bitsPerPixel = static_cast<LegoU8>(m_deviceTextureFormat.m_bitsPerPixel);
+		mipmap->m_bytesPerPixel = (static_cast<LegoU32>(m_deviceTextureFormat.m_bitsPerPixel) + 7) >> 3;
 		mipmap->m_unk0x11 = 0xff;
-		mipmap->m_bytesPerPixel =
-			static_cast<LegoU8>((static_cast<LegoU32>(m_deviceTextureFormat.m_bitsPerPixel) + 7) >> 3);
 		mipmap->m_sizeLog2 = 0xff;
 		mipmap->m_pixels = NULL;
 
@@ -701,7 +703,7 @@ void GolD3DTexture::CreateMipmapBuffers(GolD3DRenderDevice& p_renderer)
 			}
 
 			static_cast<GolD3DTexturePalette*>(m_palette)->Initialize(m_deviceTextureFormat);
-			mipmap->m_paletteData = static_cast<GolD3DTexturePalette*>(m_palette)->m_mappedEntries;
+			mipmap->m_paletteData = static_cast<GolD3DTexturePalette*>(m_palette)->GetMappedEntries();
 		}
 		else {
 			mipmap->m_paletteData = NULL;
