@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.25...4.2 FATAL_ERROR)
 
 project(racers-portable LANGUAGES CXX C VERSION 0.1)
 
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "4.5")
+  cmake_diagnostic(DEMOTE CMD_NON_TARGET_DIRECTIVE WARN)
+endif()
+
 if (EMSCRIPTEN)
   add_compile_options(-pthread -gsource-map)
   add_link_options(
