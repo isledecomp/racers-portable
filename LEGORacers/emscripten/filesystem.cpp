@@ -60,6 +60,7 @@ void Racers_SetupWebFilesystem()
 	// --- User data: saves + renderer preference persisted in OPFS ---
 	if (MAIN_THREAD_EM_ASM_INT({ return !!Module["disableOpfs"]; })) {
 		SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "web: OPFS unavailable; saves will not persist");
+		CreateDirChain(wasmfs_create_memory_backend(), Racers_userDataMount);
 		return;
 	}
 
